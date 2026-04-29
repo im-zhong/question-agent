@@ -44,7 +44,7 @@ app.add_middleware(
 )
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check() -> JSONResponse:
     """Health check endpoint."""
     return JSONResponse(
@@ -72,7 +72,7 @@ async def extract_text(file: UploadFile = File(...)) -> JSONResponse:
             detail="File size exceeds 50 MB limit.",
         )
 
-    text = content.decode("utf-8")
+    text = content.decode("utf-8", errors="replace")
     return JSONResponse(content={"text": text})
 
 
