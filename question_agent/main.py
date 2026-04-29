@@ -4,6 +4,7 @@ import io
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import docx
 import pdfplumber
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -121,6 +122,70 @@ async def extract_pdf(file: UploadFile = File(...)) -> JSONResponse:
             "page_count": total_pages,
             "pages_with_text": len(pages),
             "warnings": warnings or None,
+        }
+    )
+
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+@app.post("/extract/docx")
+async def extract_docx(file: UploadFile = File(...)) -> JSONResponse:
+    """Extract text from an uploaded .docx file, including paragraphs and tables."""
+    if file.content_type and file.content_type not in (DOCX_MIME, "application/octet-stream"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Expected .docx format ({DOCX_MIME}), got: {file.content_type}. "
+                "Legacy .doc files are not supported."
+            ),
+        )
+
+    content = await file.read()
+
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File size exceeds 50 MB limit.",
+        )
+
+    try:
+        document = docx.Document(io.BytesIO(content))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "File is not a valid .docx document. "
+                "Legacy .doc files are not supported — please convert to .docx first."
+            ),
+        )
+
+    paragraphs: list[str] = []
+    for para in document.paragraphs:
+        style = para.style.name if para.style and para.style.name != "Normal" else None
+        prefix = f"[{style}] " if style else ""
+        text = para.text.strip()
+        if text:
+            paragraphs.append(f"{prefix}{text}")
+
+    table_texts: list[str] = []
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                table_texts.append(" | ".join(cells))
+
+    parts = []
+    if paragraphs:
+        parts.append("\n".join(paragraphs))
+    if table_texts:
+        parts.append("\n\n[Tables]\n" + "\n".join(table_texts))
+
+    return JSONResponse(
+        content={
+            "text": "\n\n".join(parts) if parts else "",
+            "paragraph_count": len(paragraphs),
+            "table_count": len(document.tables),
         }
     )
 
