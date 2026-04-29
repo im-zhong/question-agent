@@ -1,13 +1,10 @@
 """FastAPI application entry point."""
 
-import io
 import os
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-import docx
-import pdfplumber
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -16,6 +13,7 @@ from starlette import status
 
 from question_agent import __version__
 from question_agent.config import settings
+from question_agent.extractors import ExtractionError, extract_docx, extract_pdf, extract_text
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
@@ -54,25 +52,21 @@ LEGACY_EXTENSIONS = {
 
 def _detect_format(filename: str, content_type: str | None) -> str | None:
     """Detect file format from extension and MIME type.  Returns None for unknown/legacy formats."""
-    # Try MIME first
     if content_type and content_type in MIME_TO_FORMAT:
         fmt = MIME_TO_FORMAT[content_type]
         if fmt is not None:
             return fmt
 
-    # Fall back to extension
     ext = os.path.splitext(filename)[1].lower()
     if ext in LEGACY_EXTENSIONS:
-        return None  # Trigger unsupported-format error with legacy hint
+        return None
     return SUPPORTED_FORMATS.get(ext)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan — startup and shutdown events."""
-    # Startup
     yield
-    # Shutdown
 
 
 app = FastAPI(
@@ -106,140 +100,6 @@ async def health_check() -> JSONResponse:
     )
 
 
-@app.post("/extract/text")
-async def extract_text(file: UploadFile = File(...)) -> JSONResponse:
-    """Extract plain text from an uploaded .txt file."""
-    if file.content_type and not file.content_type.startswith("text/"):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Only text/plain files are accepted.",
-        )
-
-    content = await file.read()
-
-    if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File size exceeds 50 MB limit.",
-        )
-
-    text = content.decode("utf-8", errors="replace")
-    return JSONResponse(content={"text": text})
-
-
-@app.post("/extract/pdf")
-async def extract_pdf(file: UploadFile = File(...)) -> JSONResponse:
-    """Extract text from an uploaded PDF file, page by page."""
-    if file.content_type and file.content_type != "application/pdf":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Only application/pdf files are accepted.",
-        )
-
-    content = await file.read()
-
-    if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File size exceeds 50 MB limit.",
-        )
-
-    try:
-        pdf = pdfplumber.open(io.BytesIO(content))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="File is not a valid PDF or is corrupted.",
-        )
-
-    pages = []
-    warnings: list[str] = []
-    total_pages = len(pdf.pages)
-    for i, page in enumerate(pdf.pages):
-        text = page.extract_text(layout=True)
-        if text:
-            pages.append(text)
-        else:
-            warnings.append(f"Page {i + 1}: no extractable text layer (likely scanned image)")
-
-    pdf.close()
-
-    full_text = "\n--- PAGE BREAK ---\n".join(pages)
-
-    return JSONResponse(
-        content={
-            "text": full_text,
-            "page_count": total_pages,
-            "pages_with_text": len(pages),
-            "warnings": warnings or None,
-        }
-    )
-
-
-DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
-
-@app.post("/extract/docx")
-async def extract_docx(file: UploadFile = File(...)) -> JSONResponse:
-    """Extract text from an uploaded .docx file, including paragraphs and tables."""
-    if file.content_type and file.content_type not in (DOCX_MIME, "application/octet-stream"):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f"Expected .docx format ({DOCX_MIME}), got: {file.content_type}. "
-                "Legacy .doc files are not supported."
-            ),
-        )
-
-    content = await file.read()
-
-    if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="File size exceeds 50 MB limit.",
-        )
-
-    try:
-        document = docx.Document(io.BytesIO(content))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                "File is not a valid .docx document. "
-                "Legacy .doc files are not supported — please convert to .docx first."
-            ),
-        )
-
-    paragraphs: list[str] = []
-    for para in document.paragraphs:
-        style = para.style.name if para.style and para.style.name != "Normal" else None
-        prefix = f"[{style}] " if style else ""
-        text = para.text.strip()
-        if text:
-            paragraphs.append(f"{prefix}{text}")
-
-    table_texts: list[str] = []
-    for table in document.tables:
-        for row in table.rows:
-            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-            if cells:
-                table_texts.append(" | ".join(cells))
-
-    parts = []
-    if paragraphs:
-        parts.append("\n".join(paragraphs))
-    if table_texts:
-        parts.append("\n\n[Tables]\n" + "\n".join(table_texts))
-
-    return JSONResponse(
-        content={
-            "text": "\n\n".join(parts) if parts else "",
-            "paragraph_count": len(paragraphs),
-            "table_count": len(document.tables),
-        }
-    )
-
-
 @app.post("/extract")
 async def extract_unified(file: UploadFile = File(...)) -> JSONResponse:
     """Unified extraction endpoint — auto-detects format and extracts text."""
@@ -267,10 +127,8 @@ async def extract_unified(file: UploadFile = File(...)) -> JSONResponse:
             detail="File size exceeds 50 MB limit.",
         )
 
-    elapsed_ms: float = 0.0
-
     if fmt == "text":
-        text = content.decode("utf-8", errors="replace")
+        text = extract_text(content)
         elapsed_ms = (time.perf_counter() - t0) * 1000
         return JSONResponse(
             content=ExtractResponse(
@@ -283,81 +141,44 @@ async def extract_unified(file: UploadFile = File(...)) -> JSONResponse:
 
     elif fmt == "pdf":
         try:
-            pdf = pdfplumber.open(io.BytesIO(content))
-        except Exception as e:
-            detail = "File is not a valid PDF or is corrupted."
-            if "password" in str(e).lower():
-                detail = "PDF is password-protected and cannot be extracted."
+            result = extract_pdf(content)
+        except ExtractionError as e:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=detail,
+                detail=str(e),
             )
-        pages = []
-        warnings: list[str] = []
-        total_pages = len(pdf.pages)
-        for i, page in enumerate(pdf.pages):
-            text = page.extract_text(layout=True)
-            if text:
-                pages.append(text)
-            else:
-                warnings.append(f"Page {i + 1}: no extractable text layer (likely scanned image)")
-        pdf.close()
-        full_text = "\n--- PAGE BREAK ---\n".join(pages)
         elapsed_ms = (time.perf_counter() - t0) * 1000
         return JSONResponse(
             content=ExtractResponse(
                 format="pdf",
-                text=full_text,
-                char_count=len(full_text),
+                text=result["text"],
+                char_count=len(result["text"]),
                 extraction_time_ms=round(elapsed_ms, 2),
-                page_count=total_pages,
-                warnings=warnings or None,
+                page_count=result["page_count"],
+                warnings=result["warnings"],
             ).model_dump()
         )
 
     elif fmt == "docx":
         try:
-            document = docx.Document(io.BytesIO(content))
-        except Exception:
+            result = extract_docx(content)
+        except ExtractionError as e:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    "File is not a valid .docx document. "
-                    "Legacy .doc files are not supported — please convert to .docx first."
-                ),
+                detail=str(e),
             )
-        paragraphs: list[str] = []
-        for para in document.paragraphs:
-            style = para.style.name if para.style and para.style.name != "Normal" else None
-            prefix = f"[{style}] " if style else ""
-            t = para.text.strip()
-            if t:
-                paragraphs.append(f"{prefix}{t}")
-        table_texts: list[str] = []
-        for table in document.tables:
-            for row in table.rows:
-                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                if cells:
-                    table_texts.append(" | ".join(cells))
-        parts = []
-        if paragraphs:
-            parts.append("\n".join(paragraphs))
-        if table_texts:
-            parts.append("\n\n[Tables]\n" + "\n".join(table_texts))
-        full_text = "\n\n".join(parts) if parts else ""
         elapsed_ms = (time.perf_counter() - t0) * 1000
         return JSONResponse(
             content=ExtractResponse(
                 format="docx",
-                text=full_text,
-                char_count=len(full_text),
+                text=result["text"],
+                char_count=len(result["text"]),
                 extraction_time_ms=round(elapsed_ms, 2),
-                paragraph_count=len(paragraphs),
-                table_count=len(document.tables),
+                paragraph_count=result["paragraph_count"],
+                table_count=result["table_count"],
             ).model_dump()
         )
 
-    # Should be unreachable
     raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown format")
 
 

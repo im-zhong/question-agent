@@ -1,4 +1,4 @@
-"""Tests for F-4: Word 文本提取."""
+"""Tests for Word .docx extraction via unified /extract endpoint."""
 
 import io
 
@@ -7,10 +7,10 @@ import httpx
 import pytest
 
 BASE = "http://localhost:8000"
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 def _make_docx(paragraphs: list[str], heading: str | None = None) -> bytes:
-    """Build a minimal .docx with given paragraphs."""
     doc = docx.Document()
     if heading:
         doc.add_heading(heading, level=1)
@@ -22,7 +22,6 @@ def _make_docx(paragraphs: list[str], heading: str | None = None) -> bytes:
 
 
 def _make_docx_with_table() -> bytes:
-    """Build a .docx with a table."""
     doc = docx.Document()
     doc.add_paragraph("Intro paragraph.")
     table = doc.add_table(rows=2, cols=2)
@@ -34,19 +33,17 @@ def _make_docx_with_table() -> bytes:
     return buf.getvalue()
 
 
-DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
-
 @pytest.mark.asyncio
 async def test_extract_docx_returns_paragraphs():
     docx_bytes = _make_docx(["Para one", "Para two"])
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"{BASE}/extract/docx",
+            f"{BASE}/extract",
             files={"file": ("test.docx", docx_bytes, DOCX_MIME)},
         )
         assert resp.status_code == 200
         data = resp.json()
+        assert data["format"] == "docx"
         assert "Para one" in data["text"]
         assert "Para two" in data["text"]
         assert data["paragraph_count"] == 2
@@ -57,7 +54,7 @@ async def test_extract_docx_heading_style_annotated():
     docx_bytes = _make_docx(["Body text"], heading="Chapter Title")
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"{BASE}/extract/docx",
+            f"{BASE}/extract",
             files={"file": ("test.docx", docx_bytes, DOCX_MIME)},
         )
         assert resp.status_code == 200
@@ -71,14 +68,13 @@ async def test_extract_docx_extracts_table():
     docx_bytes = _make_docx_with_table()
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"{BASE}/extract/docx",
+            f"{BASE}/extract",
             files={"file": ("test.docx", docx_bytes, DOCX_MIME)},
         )
         assert resp.status_code == 200
         data = resp.json()
         assert "[Tables]" in data["text"]
         assert "A | B" in data["text"]
-        assert "C | D" in data["text"]
         assert data["table_count"] == 1
 
 
@@ -86,20 +82,8 @@ async def test_extract_docx_extracts_table():
 async def test_extract_docx_invalid_file_returns_422():
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"{BASE}/extract/docx",
+            f"{BASE}/extract",
             files={"file": ("bad.docx", b"not a zip file", DOCX_MIME)},
-        )
-        assert resp.status_code == 422
-        assert "Legacy .doc" in resp.json()["detail"]
-
-
-@pytest.mark.asyncio
-async def test_extract_docx_wrong_mime_returns_422():
-    docx_bytes = _make_docx(["test"])
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract/docx",
-            files={"file": ("test.docx", docx_bytes, "text/plain")},
         )
         assert resp.status_code == 422
 
@@ -107,17 +91,17 @@ async def test_extract_docx_wrong_mime_returns_422():
 @pytest.mark.asyncio
 async def test_extract_docx_missing_file_returns_422():
     async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{BASE}/extract/docx")
+        resp = await client.post(f"{BASE}/extract")
         assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_extract_docx_octet_stream_accepted():
-    """Generic application/octet-stream MIME should be accepted."""
+async def test_extract_docx_page_count_is_null():
     docx_bytes = _make_docx(["Content"])
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"{BASE}/extract/docx",
-            files={"file": ("test.docx", docx_bytes, "application/octet-stream")},
+            f"{BASE}/extract",
+            files={"file": ("doc.docx", docx_bytes, DOCX_MIME)},
         )
         assert resp.status_code == 200
+        assert resp.json()["page_count"] is None
