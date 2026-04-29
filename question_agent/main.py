@@ -1,8 +1,10 @@
 """FastAPI application entry point."""
 
+import io
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import pdfplumber
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -72,6 +74,55 @@ async def extract_text(file: UploadFile = File(...)) -> JSONResponse:
 
     text = content.decode("utf-8")
     return JSONResponse(content={"text": text})
+
+
+@app.post("/extract/pdf")
+async def extract_pdf(file: UploadFile = File(...)) -> JSONResponse:
+    """Extract text from an uploaded PDF file, page by page."""
+    if file.content_type and file.content_type != "application/pdf":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only application/pdf files are accepted.",
+        )
+
+    content = await file.read()
+
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File size exceeds 50 MB limit.",
+        )
+
+    try:
+        pdf = pdfplumber.open(io.BytesIO(content))
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="File is not a valid PDF or is corrupted.",
+        )
+
+    pages = []
+    warnings: list[str] = []
+    total_pages = len(pdf.pages)
+    for i, page in enumerate(pdf.pages):
+        text = page.extract_text(layout=True)
+        if text:
+            pages.append(text)
+        else:
+            warnings.append(f"Page {i + 1}: no extractable text layer (likely scanned image)")
+
+    pdf.close()
+
+    full_text = "\n--- PAGE BREAK ---\n".join(pages)
+
+    return JSONResponse(
+        content={
+            "text": full_text,
+            "page_count": total_pages,
+            "pages_with_text": len(pages),
+            "warnings": warnings or None,
+        }
+    )
 
 
 def main() -> None:
