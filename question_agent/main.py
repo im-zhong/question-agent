@@ -1,6 +1,8 @@
 """FastAPI application entry point."""
 
 import io
+import os
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -34,14 +36,24 @@ MIME_TO_FORMAT = {
 class ExtractResponse(BaseModel):
     format: str
     text: str
+    char_count: int
+    extraction_time_ms: float
     page_count: int | None = None
     paragraph_count: int | None = None
     table_count: int | None = None
     warnings: list[str] | None = None
 
 
+LEGACY_EXTENSIONS = {
+    ".doc": (
+        "Legacy .doc format is not supported. "
+        "Please convert to .docx using Microsoft Word or LibreOffice."
+    ),
+}
+
+
 def _detect_format(filename: str, content_type: str | None) -> str | None:
-    """Detect file format from extension and MIME type."""
+    """Detect file format from extension and MIME type.  Returns None for unknown/legacy formats."""
     # Try MIME first
     if content_type and content_type in MIME_TO_FORMAT:
         fmt = MIME_TO_FORMAT[content_type]
@@ -49,9 +61,9 @@ def _detect_format(filename: str, content_type: str | None) -> str | None:
             return fmt
 
     # Fall back to extension
-    import os
-
     ext = os.path.splitext(filename)[1].lower()
+    if ext in LEGACY_EXTENSIONS:
+        return None  # Trigger unsupported-format error with legacy hint
     return SUPPORTED_FORMATS.get(ext)
 
 
@@ -231,13 +243,20 @@ async def extract_docx(file: UploadFile = File(...)) -> JSONResponse:
 @app.post("/extract")
 async def extract_unified(file: UploadFile = File(...)) -> JSONResponse:
     """Unified extraction endpoint — auto-detects format and extracts text."""
-    fmt = _detect_format(file.filename or "", file.content_type)
+    t0 = time.perf_counter()
+    filename = file.filename or ""
+    fmt = _detect_format(filename, file.content_type)
 
     if fmt is None:
+        ext = os.path.splitext(filename)[1].lower()
+        legacy_hint = LEGACY_EXTENSIONS.get(ext, "")
         supported = ", ".join(SUPPORTED_FORMATS.keys())
+        detail = f"Unsupported file format. Supported extensions: {supported}"
+        if legacy_hint:
+            detail = f"{detail}. {legacy_hint}"
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Unsupported file format. Supported extensions: {supported}",
+            detail=detail,
         )
 
     content = await file.read()
@@ -248,17 +267,30 @@ async def extract_unified(file: UploadFile = File(...)) -> JSONResponse:
             detail="File size exceeds 50 MB limit.",
         )
 
+    elapsed_ms: float = 0.0
+
     if fmt == "text":
         text = content.decode("utf-8", errors="replace")
-        return JSONResponse(content=ExtractResponse(format="text", text=text).model_dump())
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        return JSONResponse(
+            content=ExtractResponse(
+                format="text",
+                text=text,
+                char_count=len(text),
+                extraction_time_ms=round(elapsed_ms, 2),
+            ).model_dump()
+        )
 
     elif fmt == "pdf":
         try:
             pdf = pdfplumber.open(io.BytesIO(content))
-        except Exception:
+        except Exception as e:
+            detail = "File is not a valid PDF or is corrupted."
+            if "password" in str(e).lower():
+                detail = "PDF is password-protected and cannot be extracted."
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="File is not a valid PDF or is corrupted.",
+                detail=detail,
             )
         pages = []
         warnings: list[str] = []
@@ -270,10 +302,14 @@ async def extract_unified(file: UploadFile = File(...)) -> JSONResponse:
             else:
                 warnings.append(f"Page {i + 1}: no extractable text layer (likely scanned image)")
         pdf.close()
+        full_text = "\n--- PAGE BREAK ---\n".join(pages)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
         return JSONResponse(
             content=ExtractResponse(
                 format="pdf",
-                text="\n--- PAGE BREAK ---\n".join(pages),
+                text=full_text,
+                char_count=len(full_text),
+                extraction_time_ms=round(elapsed_ms, 2),
                 page_count=total_pages,
                 warnings=warnings or None,
             ).model_dump()
@@ -308,10 +344,14 @@ async def extract_unified(file: UploadFile = File(...)) -> JSONResponse:
             parts.append("\n".join(paragraphs))
         if table_texts:
             parts.append("\n\n[Tables]\n" + "\n".join(table_texts))
+        full_text = "\n\n".join(parts) if parts else ""
+        elapsed_ms = (time.perf_counter() - t0) * 1000
         return JSONResponse(
             content=ExtractResponse(
                 format="docx",
-                text="\n\n".join(parts) if parts else "",
+                text=full_text,
+                char_count=len(full_text),
+                extraction_time_ms=round(elapsed_ms, 2),
                 paragraph_count=len(paragraphs),
                 table_count=len(document.tables),
             ).model_dump()

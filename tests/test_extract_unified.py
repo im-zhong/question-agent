@@ -103,12 +103,64 @@ async def test_unified_no_extension_uses_mime():
 
 @pytest.mark.asyncio
 async def test_unified_response_has_required_fields():
-    """Response must contain format, text, page_count fields."""
+    """Response must contain format, text, page_count, char_count, extraction_time_ms."""
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{BASE}/extract",
             files={"file": ("doc.txt", b"test", "text/plain")},
         )
         data = resp.json()
-        for key in ("format", "text", "page_count"):
+        for key in ("format", "text", "page_count", "char_count", "extraction_time_ms"):
             assert key in data
+
+
+@pytest.mark.asyncio
+async def test_char_count_matches_text_length():
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{BASE}/extract",
+            files={"file": ("doc.txt", b"hello", "text/plain")},
+        )
+        data = resp.json()
+        assert data["char_count"] == len(data["text"])
+
+
+@pytest.mark.asyncio
+async def test_extraction_time_ms_is_positive():
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{BASE}/extract",
+            files={"file": ("doc.txt", b"test", "text/plain")},
+        )
+        assert resp.json()["extraction_time_ms"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_doc_legacy_format_rejected_with_hint():
+    """Uploading a .doc file should return 422 with legacy hint."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{BASE}/extract",
+            files={"file": ("legacy.doc", b"fake ole data", "application/octet-stream")},
+        )
+        assert resp.status_code == 422
+        assert "Legacy .doc" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_docx_page_count_is_null():
+    """Word documents should have page_count = null (not computed)."""
+    docx_bytes = _make_docx_bytes(["Content"])
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"{BASE}/extract",
+            files={
+                "file": (
+                    "doc.docx",
+                    docx_bytes,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["page_count"] is None
