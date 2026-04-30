@@ -309,6 +309,54 @@ If validation fails, note the specific issues and re-generate with correction in
 
 ### Phase 2: Roadmap
 
+**Mode routing:**
+- `$MODE == lightweight` → 下方 **轻量刷新路径**
+- `$MODE == incremental` → 下方 **增量更新路径**
+- `$MODE == full` → 下方 **完整重跑路径**（当前流程 + summarize 上下文）
+
+---
+
+**轻量刷新路径**
+
+只做检测 + 勾选，不重新生成。
+
+1. 读取 roadmap 文件
+2. 读取 summarize A 节（本轮完成），提取已完成的功能名称
+3. 在 roadmap 中将对应节点从 `- [ ]` 改为 `- [x]`
+4. 检测 items 目录：`ls docs/superpowers/items/*.md 2>/dev/null`。对每个 items doc，提取功能点名。如果 roadmap 叶子节点匹配 → 转为链接：`- [x] [功能名](items/<file>.md)`
+5. 展示更新后的功能树：
+
+```
+## Roadmap 刷新
+
+- [x] <系统名>/
+  - [x] <功能域1>/
+    - [x] [<功能A>](items/<file>.md)
+    - [x] [<功能B>](items/<file>.md)
+  - [ ] <功能域2>/
+    - [ ] <功能C>
+
+📁 docs/superpowers/plans/<date>-<name>.md
+
+→ "Continue to toolchain?" or "Skip to summary?"
+```
+
+使用 Edit 更新 roadmap 文件中的 checkbox 状态。
+
+---
+
+**增量更新路径**
+
+1. 执行轻量刷新路径的勾选 + 链接步骤
+2. 读取 summarize F 节（下一轮建议），检查是否有建议的新功能
+3. 新功能追加到对应功能域下（不重排整个树）
+4. 如果现有功能树结构不合理（如深度 > 4）→ 局部调整
+5. 展示 diff 摘要，用户确认后 Edit 更新
+
+---
+
+**完整重跑路径**
+
 **Brainstorm — Functional Decomposition**
 
 Read the spec file. Review its Key Features and Functional Hierarchy diagram.
@@ -392,6 +440,7 @@ Why bad: "项目初始化", "配置 ruff" are engineering tasks, not functional 
 - Mode: <initial | refine>
 - Spec content: <full spec markdown>
 - Existing roadmap (if refining): <content or 'N/A'>
+- Previous summarize report: <summarize content or 'N/A (首次迭代)'>
 
 Output path: `docs/superpowers/plans/YYYY-MM-DD-<project-name>.md`
 
@@ -446,6 +495,42 @@ Show the functional tree in full:
 If the roadmap reveals gaps in the spec, return to Phase 1 to re-generate (retain clarified requirements, don't re-brainstorm from scratch).
 
 ### Phase 3: Toolchain
+
+**Mode routing:**
+- `$MODE == lightweight` → 跳过 Phase 3。Toolchain 不重新生成。
+- `$MODE == incremental` → 下方 **增量更新路径**
+- `$MODE == full` → 下方 **完整重跑路径**（当前流程 + summarize 上下文）
+
+---
+
+**增量更新路径**
+
+读取现有 toolchain + summarize 报告。检查以下追加点：
+
+1. 外部知识：summarize E 节有新发现 → 追加到"调研记录"表格
+2. 关键决策：summarize J 节影响技术选择 → 更新对应条目（追加新行或标注备选变更）
+3. 经验教训：summarize K 节暴露新风险 → 追加到"风险 & 备选"
+
+展示 diff 摘要：
+
+```
+## Toolchain 增量更新
+
+无变化:
+  - Phase 1 技术栈: 保持不变
+
+追加:
+  - 调研记录: +1 条（来源: summarize E 节）
+  - 风险 & 备选: +1 条（来源: summarize K 节）
+
+📁 .harness/<name>-toolchain.md
+```
+
+用户确认后 Edit 更新。
+
+---
+
+**完整重跑路径**
 
 **Brainstorm + Research**
 
@@ -536,6 +621,7 @@ Why bad: K8s for Phase 1 is massive over-engineering. No function mapping.
 - WebSearch research: <search findings summary>
 - User preferences: <preferences or 'no preference'>
 - Existing project stack: <dependencies or 'greenfield'>
+- Previous summarize report: <summarize content or 'N/A (首次迭代)'>
 
 Output path: `.harness/<project-name>-toolchain.md`
 
