@@ -119,6 +119,48 @@ AskUserQuestion 选项：
 
 ### Phase 1: Spec
 
+**Mode routing:**
+- `$MODE == lightweight` → 跳过 Phase 1。Spec 不重新生成。
+- `$MODE == incremental` → 下方 **增量更新路径**
+- `$MODE == full` → 下方 **完整重跑路径**（当前流程 + summarize 上下文）
+
+---
+
+**增量更新路径**
+
+加载与对比：读取现有 spec 文件，加载 summarize 报告全文作为上下文。
+
+检查以下变更点：
+1. 架构图：summarize H 节（架构快照）与 spec 架构图是否一致。不一致 → 更新 spec 架构 mermaid 图
+2. Unknowns：summarize D 节（遗留问题）是否有新的 unknowns。有 → 追加到 Unknowns 列表
+3. Key Features：summarize A 节（本轮完成）是否暗示需要新增/调整 feature
+4. 更新 "Last updated" 日期
+
+展示 diff 摘要：
+
+```
+## Spec 增量更新
+
+无变化:
+  - Goal: 保持不变
+  - Target Users: 保持不变
+
+改动:
+  - Architecture 图: <描述变更>
+  - Unknowns: 追加 "<新 unknown>"
+  - Key Features: 新增/调整 <描述>
+
+📁 docs/superpowers/specs/<date>-<name>.md
+```
+
+使用 AskUserQuestion 确认："Apply these spec changes?"
+
+确认后使用 Edit 更新 spec 文件（不重新生成整个文件）。更新完成后跳至 Validate 和 Gate Summary。
+
+---
+
+**完整重跑路径**
+
 **Brainstorm — Requirement Clarification**
 
 Check if the input is vague:
@@ -229,6 +271,7 @@ graph TB
 - Constraints: <from brainstorming>
 - Existing spec (if refining): <content or 'N/A'>
 - Project context: <exploration findings>
+- Previous summarize report: <summarize content or 'N/A (首次迭代)'>
 
 Output path: `docs/superpowers/specs/YYYY-MM-DD-<project-name>.md`
 
