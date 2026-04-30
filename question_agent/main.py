@@ -5,7 +5,7 @@ import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -13,7 +13,15 @@ from starlette import status
 
 from question_agent import __version__
 from question_agent.config import settings
-from question_agent.extractors import ExtractionError, extract_docx, extract_pdf, extract_text
+from question_agent.extractors import (
+    ExtractionError,
+    extract_docx,
+    extract_docx_structured,
+    extract_pdf,
+    extract_pdf_structured,
+    extract_text,
+    extract_text_structured,
+)
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
@@ -34,6 +42,26 @@ MIME_TO_FORMAT = {
 class ExtractResponse(BaseModel):
     format: str
     text: str
+    char_count: int
+    extraction_time_ms: float
+    page_count: int | None = None
+    paragraph_count: int | None = None
+    table_count: int | None = None
+    warnings: list[str] | None = None
+
+
+class StructuredParagraph(BaseModel):
+    text: str
+    page_number: int | None = None
+    font_size: float | None = None
+    is_bold: bool | None = None
+    x0: float | None = None
+    style_name: str | None = None
+
+
+class StructuredExtractResponse(BaseModel):
+    format: str
+    paragraphs: list[StructuredParagraph]
     char_count: int
     extraction_time_ms: float
     page_count: int | None = None
@@ -101,8 +129,15 @@ async def health_check() -> JSONResponse:
 
 
 @app.post("/extract")
-async def extract_unified(file: UploadFile = File(...)) -> JSONResponse:
-    """Unified extraction endpoint — auto-detects format and extracts text."""
+async def extract_unified(
+    file: UploadFile = File(...),
+    mode: str = Query("text", pattern="^(text|structured)$"),
+) -> JSONResponse:
+    """Unified extraction endpoint — auto-detects format and extracts text.
+
+    Query params:
+        mode: "text" (default) for flat text, "structured" for per-paragraph metadata.
+    """
     t0 = time.perf_counter()
     filename = file.filename or ""
     fmt = _detect_format(filename, file.content_type)
@@ -127,6 +162,13 @@ async def extract_unified(file: UploadFile = File(...)) -> JSONResponse:
             detail="File size exceeds 50 MB limit.",
         )
 
+    if mode == "structured":
+        return await _extract_structured(fmt, content, t0)
+    return await _extract_text_mode(fmt, content, t0)
+
+
+async def _extract_text_mode(fmt: str, content: bytes, t0: float) -> JSONResponse:
+    """Extract flat text (mode=text, default)."""
     if fmt == "text":
         text = extract_text(content)
         elapsed_ms = (time.perf_counter() - t0) * 1000
@@ -173,6 +215,64 @@ async def extract_unified(file: UploadFile = File(...)) -> JSONResponse:
                 format="docx",
                 text=result["text"],
                 char_count=len(result["text"]),
+                extraction_time_ms=round(elapsed_ms, 2),
+                paragraph_count=result["paragraph_count"],
+                table_count=result["table_count"],
+            ).model_dump()
+        )
+
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown format")
+
+
+async def _extract_structured(fmt: str, content: bytes, t0: float) -> JSONResponse:
+    """Extract structured paragraphs with font/style metadata (mode=structured)."""
+    if fmt == "text":
+        paragraphs, char_count = extract_text_structured(content)
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        return JSONResponse(
+            content=StructuredExtractResponse(
+                format="text",
+                paragraphs=[StructuredParagraph(**p) for p in paragraphs],
+                char_count=char_count,
+                extraction_time_ms=round(elapsed_ms, 2),
+                paragraph_count=len(paragraphs),
+            ).model_dump()
+        )
+
+    elif fmt == "pdf":
+        try:
+            result = extract_pdf_structured(content)
+        except ExtractionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            )
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        return JSONResponse(
+            content=StructuredExtractResponse(
+                format="pdf",
+                paragraphs=[StructuredParagraph(**p) for p in result["paragraphs"]],
+                char_count=result["char_count"],
+                extraction_time_ms=round(elapsed_ms, 2),
+                page_count=result["page_count"],
+                warnings=result["warnings"],
+            ).model_dump()
+        )
+
+    elif fmt == "docx":
+        try:
+            result = extract_docx_structured(content)
+        except ExtractionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            )
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        return JSONResponse(
+            content=StructuredExtractResponse(
+                format="docx",
+                paragraphs=[StructuredParagraph(**p) for p in result["paragraphs"]],
+                char_count=result["char_count"],
                 extraction_time_ms=round(elapsed_ms, 2),
                 paragraph_count=result["paragraph_count"],
                 table_count=result["table_count"],
