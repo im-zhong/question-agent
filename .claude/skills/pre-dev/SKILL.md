@@ -56,12 +56,66 @@ level: 4
 
 <Steps>
 
-### Phase 0: Setup
+### Phase 0: Iteration Assessment
 
-Determine mode:
-- Search `docs/superpowers/specs/` for an existing spec matching the project name
-- If found → refine mode (note what's changing, preserve what still applies)
-- If not found → initial mode
+pre-dev 的大脑。感知当前迭代状态，加载上下文，智能推荐运行模式。
+
+**Step 0.1 — 加载状态**
+
+读取 `docs/superpowers/state.md`：
+- 存在 → 解析 frontmatter（iteration、current_phase、status）和文档快照表，提取 spec/roadmap/toolchain 路径
+- 不存在 → 标记为"首次迭代"
+
+**Step 0.2 — 收集迭代上下文（并行）**
+
+同时执行：
+- 加载 spec、roadmap、toolchain 文件（从 Step 0.1 文档快照路径）
+- 搜索 `docs/superpowers/summaries/` 找最新 `*.md` 文件 → 加载全文
+- `git log --oneline -10`
+
+如果 summarize 报告不存在且非首次迭代（有 spec/roadmap），标注为"缺失 summarize"。
+
+**Step 0.3 — 评估与推荐**
+
+分析 4 个信号，计算推荐模式：
+
+| 信号 | 来源 | 轻量刷新 ← | 增量更新 ← | 完整重跑 ← |
+|------|------|-----------|-----------|-----------|
+| 文档新旧 | spec/roadmap 更新时间 vs git log | 文档与最新 commit 同步 | 滞后 < 10 commits | 滞后 > 10 commits |
+| 变更幅度 | summarize G 节或 git diff stat | +100 行以下，≤3 文件 | 中等 | +500 行以上，10+ 文件 |
+| 遗留问题严重性 | summarize D 节 | 仅小修小补 | 功能未开始/集成未完成 | 架构级问题需重新设计 |
+| 用户显式意图 | 用户输入 | "继续"/"下一步" | 无明确信号 | "重新设计"/"推倒重来"/"换框架" |
+
+综合规则（优先级从高到低）：
+1. 用户显式意图 → 直接决定（最高优先）
+2. 架构级遗留问题 → 完整重跑
+3. 文档严重滞后 + 大变更幅度 → 完整重跑
+4. 文档同步 + 小变更幅度 + 无严重遗留 → 轻量刷新
+5. 其他情况 → 增量更新（默认）
+6. 缺失 summarize → 降级为完整重跑
+
+**Step 0.4 — 用户确认**
+
+展示评估摘要并使用 AskUserQuestion 让用户确认：
+
+```
+## 迭代评估 — Iteration <N>
+
+📋 上一轮: <summarize 路径或 "首次迭代">
+📊 变更: <X commits, +Y/-Z 行, W 文件 或 "首次迭代，无历史">
+⚠️ 遗留: <N 个 或 "无">
+
+→ 建议: **<模式>**
+  理由: <2-3 句话解释判断依据>
+```
+
+AskUserQuestion 选项：
+- "<推荐模式> (Recommended)"
+- "轻量刷新 — 只勾选完成项，跳过设计文档重新生成"
+- "增量更新 — 局部调整 spec/roadmap/toolchain"
+- "完整重跑 — 带上下文重新生成全部设计文档"
+
+用户确认后，记录选定模式为 `$MODE`（`lightweight` / `incremental` / `full`），后续阶段据此调整行为。
 
 ### Phase 1: Spec
 
