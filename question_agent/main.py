@@ -4,6 +4,7 @@ import os
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,8 @@ from pydantic import BaseModel
 from starlette import status
 
 from question_agent import __version__
+from question_agent.chapters import detect_chapters_hybrid
+from question_agent.chapters.tree import build_chapter_tree
 from question_agent.config import settings
 from question_agent.extractors import (
     ExtractionError,
@@ -68,6 +71,19 @@ class StructuredExtractResponse(BaseModel):
     paragraph_count: int | None = None
     table_count: int | None = None
     warnings: list[str] | None = None
+
+
+class DetectionStats(BaseModel):
+    total: int
+    rule_detected: int
+    llm_detected: int
+    method: str  # "hybrid" | "rule_only"
+
+
+class StructureResponse(BaseModel):
+    format: str
+    chapters: list[dict[str, Any]] | None = None
+    detection_stats: DetectionStats
 
 
 LEGACY_EXTENSIONS = {
@@ -280,6 +296,105 @@ async def _extract_structured(fmt: str, content: bytes, t0: float) -> JSONRespon
         )
 
     raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown format")
+
+
+@app.post("/structure")
+async def structure_endpoint(file: UploadFile = File(...)) -> JSONResponse:
+    """Extract chapter structure from a document.
+
+    Full pipeline: extract paragraphs → detect chapters → build tree.
+    """
+    filename = file.filename or ""
+    fmt = _detect_format(filename, file.content_type)
+
+    if fmt is None:
+        ext = os.path.splitext(filename)[1].lower()
+        legacy_hint = LEGACY_EXTENSIONS.get(ext, "")
+        supported = ", ".join(SUPPORTED_FORMATS.keys())
+        detail = f"Unsupported file format. Supported extensions: {supported}"
+        if legacy_hint:
+            detail = f"{detail}. {legacy_hint}"
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=detail,
+        )
+
+    content = await file.read()
+
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File size exceeds 50 MB limit.",
+        )
+
+    # Step 1: Extract structured paragraphs
+    if fmt == "text":
+        paragraphs_list, _ = extract_text_structured(content)
+        page_map = None
+    elif fmt == "pdf":
+        try:
+            result = extract_pdf_structured(content)
+        except ExtractionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            )
+        paragraphs_list = result["paragraphs"]
+        # Re-index: paragraphs_list items may not have line_index; add it
+        for i, p in enumerate(paragraphs_list):
+            p["line_index"] = i
+        page_map = {
+            p["line_index"]: p["page_number"] for p in paragraphs_list if p.get("page_number")
+        }
+    elif fmt == "docx":
+        try:
+            result = extract_docx_structured(content)
+        except ExtractionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            )
+        paragraphs_list = result["paragraphs"]
+        page_map = None
+        for i, p in enumerate(paragraphs_list):
+            p["line_index"] = i
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown format"
+        )
+
+    # Step 2: Detect chapters
+    detection = detect_chapters_hybrid(paragraphs_list)
+    headings = detection["headings"]
+    chapters_tree = None
+
+    if headings:
+        # Build per-line page map for PDF
+        line_page_map: dict[int, int] | None = None
+        if page_map:
+            line_page_map = {}
+            for i, p in enumerate(paragraphs_list):
+                pn = p.get("page_number")
+                if pn is not None:
+                    line_page_map[i] = pn
+
+        tree = build_chapter_tree(headings, len(paragraphs_list), line_page_map)
+        chapters_tree = [n.to_dict() for n in tree]
+
+    stats = DetectionStats(
+        total=detection["rule_count"] + detection["llm_count"],
+        rule_detected=detection["rule_count"],
+        llm_detected=detection["llm_count"],
+        method=detection["detection_method"],
+    )
+
+    return JSONResponse(
+        content=StructureResponse(
+            format=fmt,
+            chapters=chapters_tree,
+            detection_stats=stats,
+        ).model_dump()
+    )
 
 
 def main() -> None:
