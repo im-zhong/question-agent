@@ -13,8 +13,7 @@ from pydantic import BaseModel
 from starlette import status
 
 from question_agent import __version__
-from question_agent.chapters import detect_chapters_hybrid
-from question_agent.chapters.tree import build_chapter_tree
+from question_agent.chapters import build_chapter_tree, detect_chapters_hybrid
 from question_agent.config import settings
 from question_agent.extractors import (
     ExtractionError,
