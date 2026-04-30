@@ -23,16 +23,21 @@ level: 4
 ---
 
 <Purpose>
-  Transform a vague idea into development-ready materials through three sequential phases:
-  spec (PRD) → roadmap (functional tree) → toolchain (tech stack).
-  Each phase follows: brainstorm → generate → validate → gate.
-  User confirms at each gate before proceeding.
+  承上启下。将 vague idea 或上一轮 summarize 报告转化为/更新开发材料，
+  通过三个顺序阶段：spec (PRD) → roadmap (功能树) → toolchain (技术栈)。
+  
+  首次迭代：brainstorm → generate → validate → gate（完整三阶段）。
+  后续迭代：加载 summarize 报告 → 评估变更 → 智能选择运行模式。
+  
+  每个阶段：brainstorm → generate → validate → gate。
+  用户在每个门控点确认后再进入下一阶段。
 </Purpose>
 
 <Use_When>
-  - User has a project idea and wants structured pre-development planning
+  - 用户有项目想法，需要结构化 pre-dev 规划（首次迭代）
+  - 完成一轮 dev-loop + summarize 后，需要更新设计并规划下一步（后续迭代）
+  - 用户说 "pre-dev"、"pre dev"、"继续规划"、"下一步"、"更新设计"
   - Starting a new development cycle (pre-dev → progressive-plan → scaffold → dev → refactor → pre-dev)
-  - User says "pre-dev", "pre dev", or describes wanting to plan before coding
 </Use_When>
 
 <Do_Not_Use_When>
