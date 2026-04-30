@@ -664,10 +664,38 @@ If toolchain reveals missing roadmap functions, return to Phase 2 (or Phase 1) t
 
 ### Phase 4: Final Summary
 
-First, scan the roadmap to find the first available functional point:
-- Read the roadmap file
-- Find the first leaf node with `[ ]` status (not `[~]` or `[x]`)
-- Use its name in the suggestion below
+**轻量刷新模式：**
+
+```
+## Pre-Dev Complete (轻量刷新)
+
+📋 上一轮总结: docs/superpowers/summaries/<date>-summary.md
+🌲 下一个功能点: <roadmap 中第一个 [ ] 叶子节点>
+
+**建议下一步:**
+  运行 /progressive-plan "<功能点名>" 开始拆解
+  或 /pre-dev "<描述>" 重新评估
+```
+
+**增量更新模式：**
+
+```
+## Pre-Dev Complete
+
+📋 Spec:    docs/superpowers/specs/<date>-<name>.md （改动: <摘要>）
+🌲 Roadmap: docs/superpowers/plans/<date>-<name>.md （改动: <摘要>）
+🔧 Stack:   .harness/<name>-toolchain.md （改动: <摘要>）
+
+**建议下一步:**
+  扫描 roadmap 中第一个无前置依赖的 [ ] 功能点
+  → 运行 /progressive-plan 自动拆解
+
+  或手动指定: /progressive-plan "<功能点名>"
+
+All documents are living — they'll be refined in the next pre-dev cycle.
+```
+
+**完整重跑模式：**
 
 ```
 ## Pre-Dev Complete
@@ -728,9 +756,18 @@ If any phase was skipped/DRAFT, add:
   - If document generation fails validation 3 times at the same phase, stop and ask user to provide direct input
   - If user says "this is taking too long, just give me the output", skip remaining gates
   - If user wants to stop after Phase 1 or 2, save what's done and suggest resuming later
+  - 如果 summarize 报告与当前文档严重冲突（如 spec 描述与架构快照完全不同），提示用户手动确认后再继续
+  - 如果连续 2 次轻量刷新后用户仍不满意 → 建议升级到增量更新
+  - 如果连续 2 次增量更新后用户仍不满意 → 建议升级到完整重跑
 </Escalation>
 
 <Progressive_Principle>
   NEVER finalize tech for phases beyond the current one. "Phase 2+ 候选" is the correct
   level of detail. They will be decided when that phase's /pre-dev iteration runs.
+  
+  每次 pre-dev 迭代都是 refinement 机会：spec 从模糊到精确，roadmap 从粗到细，
+  toolchain 从候选到锁定。summarize 报告是迭代间的桥梁 — 经验教训、遗留问题、
+  外部知识通过它流入下一轮设计。
+  
+  轻量刷新和增量更新是常态，完整重跑是例外。
 </Progressive_Principle>
