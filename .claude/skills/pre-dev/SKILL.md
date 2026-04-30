@@ -84,30 +84,94 @@ Gather context for the agent:
 - Note existing tech stack, project type, conventions
 - Read existing spec file if in refine mode
 
-**Delegate**
+**Generate**
 
+Generate the spec document using Write. Follow this exact structure and constraints:
+
+**Output Format:**
+
+```markdown
+# <Project Name> — Spec
+
+**Created:** YYYY-MM-DD
+**Last updated:** YYYY-MM-DD
+**Status:** DRAFT
+
+## Goal
+<!-- 1-3 sentences. What problem does this solve? -->
+
+## Target Users
+<!-- Who will use this? -->
+
+## Key Features
+- [ ] <!-- feature 1 -->
+- [ ] <!-- feature 2 -->
+- [ ] <!-- feature 3 -->
+<!-- max 5 features -->
+
+## Non-Goals
+<!-- What are we explicitly NOT building? -->
+
+## Constraints
+<!-- Known constraints: time, resources, technical, domain -->
+
+## Unknowns
+<!-- Must be non-empty. What we still need to figure out. -->
+- <!-- unknown 1 -->
+- <!-- unknown 2 -->
+
+## Architecture
+
+```mermaid
+graph TB
+    %% Simple architecture diagram. Start minimal, refine over iterations.
+    %% Show system components and their relationships.
+    %% Use dashed lines ( -.-> ) for planned/future components.
 ```
-Agent(
-  description: "Generate spec document",
-  subagent_type: "oh-my-claudecode:pre-dev-agent",
-  model: "opus",
-  prompt: "
-    phase: spec
-    Mode: <initial | refine>
-    Requirements brief:
-      Goal: <...>
-      Target users: <...>
-      Core features: <...>
-      Constraints: <...>
 
-    Existing spec (if refining): <content or 'N/A'>
-    Project context: <exploration findings>
+## Functional Hierarchy
 
-    Output path: docs/superpowers/specs/YYYY-MM-DD-<project-name>.md
-    Write the spec to that path.
-  "
-)
+```mermaid
+graph TB
+    %% Functional breakdown as a tree.
+    %% Start simple — top-level domains only if early iteration.
+    %% Add sub-functions as the design matures.
 ```
+```
+
+**Constraints:**
+- Max 5 key features. Fewer is better.
+- Unknowns field MUST be non-empty. Never claim certainty where it doesn't exist.
+- No implementation details (no languages, frameworks, APIs, DB schemas).
+- Architecture diagram: start with 3-6 nodes. Simple boxes and arrows.
+- Functional hierarchy: top-level domains first. Add children in later iterations.
+- If refining an existing spec: preserve what still applies, update what changed.
+- Use mermaid `graph TB` for both diagrams.
+
+**Examples:**
+
+<Good>
+  Goal: "Help teachers create and manage question banks for exams"
+  Features: [question entry, category search, exam paper assembly] — 3 features, tight
+  Unknowns: ["Whether multi-teacher collaboration is needed", "Question format scope"]
+  Architecture: 4 nodes — User Browser, API Server, Question Store, File Storage
+</Good>
+<Bad>
+  Features: [question CRUD, category management, search, filtering, sorting, pagination, bulk import, export, versioning, comments] — 10 features, over-designed
+  Unknowns: [] — empty, pretending full clarity
+  Architecture: 15 nodes with specific tech choices (PostgreSQL, Redis, S3) — implementation details
+</Bad>
+
+**Context for generation:**
+- Mode: <initial | refine>
+- Goal: <from brainstorming>
+- Target users: <from brainstorming>
+- Core features: <from brainstorming>
+- Constraints: <from brainstorming>
+- Existing spec (if refining): <content or 'N/A'>
+- Project context: <exploration findings>
+
+Output path: `docs/superpowers/specs/YYYY-MM-DD-<project-name>.md`
 
 **Validate**
 
@@ -119,7 +183,7 @@ Read the spec file and check:
 - [ ] Functional hierarchy mermaid diagram present
 - [ ] No implementation details (no language/framework/API references)
 
-If validation fails, note the specific issues and re-delegate with correction instructions.
+If validation fails, note the specific issues and re-generate with correction instructions.
 
 **Gate Summary**
 
