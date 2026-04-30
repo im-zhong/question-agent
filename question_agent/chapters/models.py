@@ -10,4 +10,4 @@ class ChapterHeading(BaseModel):
     level: int
     title: str
     confidence: float
-    method: Literal["pattern", "style", "font"]
+    method: Literal["pattern", "style", "font", "llm"]

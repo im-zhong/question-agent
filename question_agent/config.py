@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # --- GLM API ---
     glm_api_key: str = ""
-    glm_model: str = "glm-5-flash"
+    glm_model: str = "glm-4-flash"
 
     # --- Paths ---
     project_root: Path = Path(__file__).resolve().parent.parent

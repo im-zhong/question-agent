@@ -1,6 +1,12 @@
 """Chapter detection package."""
 
 from question_agent.chapters.detector import detect_chapters
+from question_agent.chapters.llm import LlmChapterResult, detect_chapters_llm
 from question_agent.chapters.models import ChapterHeading
 
-__all__ = ["ChapterHeading", "detect_chapters"]
+__all__ = [
+    "ChapterHeading",
+    "LlmChapterResult",
+    "detect_chapters",
+    "detect_chapters_llm",
+]
