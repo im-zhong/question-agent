@@ -221,26 +221,77 @@ No upper limit on questions. If the spec's functional hierarchy is already clear
 Also check if a roadmap already exists at `docs/superpowers/plans/*.md` with matching name.
 If found → refine mode: read it to preserve checkbox states.
 
-**Delegate**
+**Generate**
 
+Generate the roadmap document using Write. Follow this exact structure and constraints:
+
+**Output Format:**
+
+```markdown
+# <Project Name> — Roadmap
+
+**Created:** YYYY-MM-DD
+**Last updated:** YYYY-MM-DD
+
+## 功能树
+
+- [ ] <!-- Root: system/product name -->
+  - [ ] <!-- Functional domain 1 -->
+    - [ ] <!-- Specific function -->
+    - [ ] <!-- Specific function -->
+  - [ ] <!-- Functional domain 2 -->
+    - [ ] <!-- Specific function -->
+    - [ ] <!-- Specific function -->
+      - [ ] <!-- Sub-function (max depth 4) -->
+  - [ ] <!-- Functional domain 3 -->
+    - [ ] <!-- Specific function -->
 ```
-Agent(
-  description: "Generate functional roadmap tree",
-  subagent_type: "oh-my-claudecode:pre-dev-agent",
-  model: "opus",
-  prompt: "
-    phase: roadmap
-    Mode: <initial | refine>
-    Spec content:
-    <full spec markdown>
 
-    Existing roadmap (if refining): <content or 'N/A'>
+**Constraints:**
+- PURE functional decomposition only. NO engineering tasks. Bad: "setup ruff", "init project", "configure CI", "write tests". Good: "题目格式校验", "全文搜索", "自动组卷规则".
+- Max 4 levels deep (root → domain → function → sub-function).
+- Each leaf node must be independently verifiable.
+- Checkbox format: `- [ ]` on every node.
+- The first functional domain should be the "minimum runnable system".
+- Functional domains ordered by dependency.
+- Names in the user's language (Chinese if spec is in Chinese).
+- If refining: update checkbox statuses (`- [x]` for completed), add new features, restructure if needed.
 
-    Output path: docs/superpowers/plans/YYYY-MM-DD-<project-name>.md
-    Write the roadmap to that path.
-  "
-)
+**Examples:**
+
+<Good>
 ```
+- [ ] 题库系统/
+  - [ ] 题目录入/
+    - [ ] 单题录入
+    - [ ] 批量导入
+    - [ ] 题目格式校验
+  - [ ] 分类检索/
+    - [ ] 按知识点分类
+    - [ ] 按难度筛选
+    - [ ] 全文搜索
+  - [ ] 试卷组卷/
+    - [ ] 手动选题
+    - [ ] 自动组卷规则
+```
+</Good>
+<Bad>
+```
+- [ ] 题库系统/
+  - [ ] 项目初始化
+  - [ ] 配置 ruff 和 pytest
+  - [ ] 搭建 FastAPI 框架
+  - [ ] 题目CRUD API
+```
+Why bad: "项目初始化", "配置 ruff" are engineering tasks, not functional features.
+</Bad>
+
+**Context for generation:**
+- Mode: <initial | refine>
+- Spec content: <full spec markdown>
+- Existing roadmap (if refining): <content or 'N/A'>
+
+Output path: `docs/superpowers/plans/YYYY-MM-DD-<project-name>.md`
 
 **Validate**
 
@@ -262,7 +313,7 @@ After:  - [ ] [单题录入](items/2026-04-29-单题录入.md)
 ```
 Detect progress markers from items doc status and update: 进行中 → `[~]`, 完成 → `[x]`.
 
-If validation fails, re-delegate with specific corrections.
+If validation fails, re-generate with specific corrections.
 
 **Gate Summary**
 
