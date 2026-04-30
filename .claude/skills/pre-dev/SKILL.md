@@ -366,32 +366,76 @@ Ask user ONE question about tech preferences using AskUserQuestion:
 
 Then ask more if needed — no upper limit.
 
-**Delegate**
+**Generate**
 
+Generate the toolchain document using Write. Follow this exact structure and constraints:
+
+**Output Format:**
+
+```markdown
+# <Project Name> — Toolchain
+
+**Created:** YYYY-MM-DD
+**Last updated:** YYYY-MM-DD
+**Status:** DRAFT
+
+## Phase 1 技术栈 (当前)
+
+| 技术 | 支撑功能 | 选型理由 |
+|------|---------|---------|
+| <!-- tech --> | <!-- which roadmap functions this supports --> | <!-- why this choice --> |
+
+## Phase 2+ 候选方向
+
+| 阶段 | 候选技术 | 支撑功能 | 触发条件 |
+|------|---------|---------|---------|
+| Phase N | <!-- candidate tech --> | <!-- function it would support --> | <!-- when to consider it --> |
+
+## 调研记录
+
+| 来源 | 关键发现 |
+|------|---------|
+| websearch: "<query>" | <finding> |
+
+## 风险 & 备选
+
+- **风险:** <description> → **备选:** <alternative>
 ```
-Agent(
-  description: "Generate toolchain proposal",
-  subagent_type: "oh-my-claudecode:pre-dev-agent",
-  model: "opus",
-  prompt: "
-    phase: toolchain
-    Spec:
-    <full spec markdown>
 
-    Roadmap:
-    <full roadmap markdown>
+**Constraints:**
+- Phase 1: CONFIRMED choices only. Each tech MUST map to a specific functional feature from the roadmap.
+- Phase 2+: CANDIDATE only. Use tentative language: "可能使用", "候选", "待调研".
+- Phase 3+: If the roadmap has more phases, mark as "开发时再定".
+- Prefer simplicity. SQLite over PostgreSQL until you need concurrency. Local files over S3 until you need distribution. Single server over microservices until you have traffic.
+- Every choice needs a one-sentence reason.
+- Include at least 1 risk with alternative.
+- Reuse existing project tech stack where possible.
 
-    WebSearch research:
-    <search findings summary>
+**Examples:**
 
-    User preferences: <preferences or 'no preference'>
-    Existing project stack: <dependencies or 'greenfield'>
+<Good>
+Phase 1:
+| FastAPI | 题目录入API、分类检索API | 项目已有Python基建，轻量异步框架 |
+| SQLite | 题目存储、分类查询 | 单机轻量，Phase 1无并发需求 |
 
-    Output path: .harness/<project-name>-toolchain.md
-    Write the toolchain doc to that path.
-  "
-)
-```
+Phase 2+:
+| Phase 2 | PostgreSQL + FTS | 全文搜索 | SQLite搜索性能不足时切换 |
+</Good>
+<Bad>
+Phase 1:
+| Kubernetes | 容器编排 | 为未来扩展做准备 |
+| PostgreSQL | 主存储 | 生产环境标准 |
+Why bad: K8s for Phase 1 is massive over-engineering. No function mapping.
+</Bad>
+
+**Context for generation:**
+- Spec: <full spec markdown>
+- Roadmap: <full roadmap markdown>
+- WebSearch research: <search findings summary>
+- User preferences: <preferences or 'no preference'>
+- Existing project stack: <dependencies or 'greenfield'>
+
+Output path: `.harness/<project-name>-toolchain.md`
 
 **Validate**
 
