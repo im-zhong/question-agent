@@ -245,9 +245,7 @@ graph TB
 | `.claude/agents/pre-dev-agent.md` | 逻辑融合进 pre-dev skill |
 | `.claude/agents/progressive-planner.md` | 逻辑融合进 progressive-plan skill |
 | `.claude/agents/summarize-agent.md` | 逻辑融合进 summarize skill |
-| `.claude/agents/study-agent.md` | 非 harness 核心，study skill 可独立存在 |
 | `.claude/skills/run/SKILL.md` | 改为 runandcheck 子代理 |
-| `.claude/skills/study/SKILL.md` | 非 harness 核心，超出本次重构范围 |
 
 ## 需新建/重写的文件
 
@@ -267,5 +265,7 @@ graph TB
 | 文件 | 说明 |
 |---|---|
 | `.claude/skills/dev-status/SKILL.md` | 不变 |
+| `.claude/skills/study/SKILL.md` | 保留，不在本次重构范围 |
+| `.claude/agents/study-agent.md` | 保留，不在本次重构范围 |
 | `docs/superpowers/` 下所有现有文档 | 保留 |
 | `.harness/` 下所有现有文件 | 保留 |
