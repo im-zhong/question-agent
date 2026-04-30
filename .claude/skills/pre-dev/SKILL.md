@@ -25,7 +25,7 @@ level: 4
 <Purpose>
   Transform a vague idea into development-ready materials through three sequential phases:
   spec (PRD) → roadmap (functional tree) → toolchain (tech stack).
-  Each phase follows: brainstorm → delegate to pre-dev-agent → validate → gate.
+  Each phase follows: brainstorm → generate → validate → gate.
   User confirms at each gate before proceeding.
 </Purpose>
 
@@ -43,7 +43,7 @@ level: 4
 
 <Execution_Policy>
   - Single skill that runs 3 sequential phases internally
-  - Each phase: brainstorm → delegate pre-dev-agent → validate → gate
+  - Each phase: brainstorm → generate → validate → gate
   - Gates are NON-NEGOTIABLE: user MUST confirm before next phase
   - Brainstorm questions have NO upper limit — ask until the picture is clear
   - If a later phase reveals gaps, go back to the earlier phase (retaining clarified context)
@@ -75,7 +75,7 @@ If vague, ask questions ONE AT A TIME using AskUserQuestion until the picture is
 
 Stop when you can clearly state: goal + target user + 3+ key features.
 
-If the input is already PRD-like, skip brainstorming and proceed to delegate.
+If the input is already PRD-like, skip brainstorming and proceed to generate.
 
 **Explore Project Context**
 
@@ -202,7 +202,7 @@ If validation fails, note the specific issues and re-generate with correction in
 
 **Gate Handling:**
 - "Continue" → proceed to Phase 2
-- "Change X" → re-delegate with feedback (retain clarified requirements)
+- "Change X" → re-generate with feedback (retain clarified requirements)
 - "Skip for now" → mark spec status as DRAFT, proceed to Phase 2
 
 ### Phase 2: Roadmap
@@ -337,11 +337,11 @@ Show the functional tree in full:
 
 **Gate Handling:**
 - "Continue" → proceed to Phase 3
-- "Change X" → re-delegate with feedback
+- "Change X" → re-generate with feedback
 - "Skip" → proceed with DRAFT note
 
 **回退:**
-If the roadmap reveals gaps in the spec, return to Phase 1 to re-delegate (retain clarified requirements, don't re-brainstorm from scratch).
+If the roadmap reveals gaps in the spec, return to Phase 1 to re-generate (retain clarified requirements, don't re-brainstorm from scratch).
 
 ### Phase 3: Toolchain
 
@@ -468,11 +468,11 @@ Read the toolchain file and check:
 
 **Gate Handling:**
 - "Confirm" → proceed to Summary
-- "Change X" → re-delegate with feedback
+- "Change X" → re-generate with feedback
 - "Skip" → mark DRAFT
 
 **回退:**
-If toolchain reveals missing roadmap functions, return to Phase 2 (or Phase 1) to re-delegate.
+If toolchain reveals missing roadmap functions, return to Phase 2 (or Phase 1) to re-generate.
 
 ### Phase 4: Final Summary
 
@@ -528,8 +528,7 @@ If any phase was skipped/DRAFT, add:
   - Bash: explore codebase, find matching files
   - AskUserQuestion: brainstorm at each phase (one at a time, no upper limit)
   - WebSearch: research similar system tech stacks (Phase 3)
-  - Agent: delegate to pre-dev-agent (model=opus, phase="spec"|"roadmap"|"toolchain")
-  - Do NOT use Write or Edit — pre-dev-agent writes the files
+  - Write: generate spec, roadmap, and toolchain documents
 </Tool_Usage>
 
 <Gate_Enforcement>
@@ -538,7 +537,7 @@ If any phase was skipped/DRAFT, add:
 </Gate_Enforcement>
 
 <Escalation>
-  - If an agent delegation fails 3 times at the same phase, stop and ask user to provide direct input
+  - If document generation fails validation 3 times at the same phase, stop and ask user to provide direct input
   - If user says "this is taking too long, just give me the output", skip remaining gates
   - If user wants to stop after Phase 1 or 2, save what's done and suggest resuming later
 </Escalation>
