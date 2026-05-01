@@ -1,6 +1,6 @@
 ---
 name: run
-description: Continuous quality-gate runner — checks, edge-case tests, auto-fixes, and commits when green
+description: Continuous quality-gate runner — checks, edge-case tests, walkthrough, auto-fixes, and commits when green
 ---
 
 # Run — 持续性质量门禁 Runner
@@ -10,8 +10,11 @@ description: Continuous quality-gate runner — checks, edge-case tests, auto-fi
 ## 流程
 
 ```
-读取上下文 → 质量门禁 → 边缘测试 → [失败] → 复现测试 → 分析报告 → autopilot 修复 → 循环
-                                    → [通过] → 功能验证 → conventional commit
+读取上下文 → 质量门禁 → 边缘测试 → 启动系统 + 功能走查 → 功能验证 → conventional commit
+                 ↓ 失败                ↓ 失败
+                 └→ 失败处理 ──────────┘
+                       ↓ 修复后
+                    质量门禁 → ... → 功能走查
 ```
 
 ## Step 1: 读取上下文
@@ -23,7 +26,7 @@ description: Continuous quality-gate runner — checks, edge-case tests, auto-fi
 | Spec | `docs/superpowers/specs/*.md` |
 | Roadmap (功能树) | `docs/superpowers/plans/*.md` |
 | Item (当前功能拆解) | `docs/superpowers/items/*.md` |
-| Toolchain | `.harness/*toolchain*.md` |
+| Toolchain | `.harness/*toolchain*.md`（含 `## Walkthrough` 段落） |
 | Git 状态 | `git status --short && git log --oneline -3` |
 
 **确定当前功能点**：找到 items 文档中第一个状态非 `完成` 的 F-N，打印：
@@ -86,7 +89,7 @@ uv run pytest -v
 uv run pytest tests/test_edge_*.py -v
 ```
 
-- 全部通过 → Step 6（功能验证）
+- 全部通过 → Step 6（启动系统 + 功能走查）
 - 任一失败 → Step 4（生成边缘失败报告）→ Step 5（失败处理）
 
 ## Step 4: 边缘失败报告
@@ -135,7 +138,7 @@ uv run pytest tests/test_edge_*.py -v
 # Failure Report — <timestamp>
 
 ## Failed Check
-<ruff|mypy|pytest|edge-case>
+<ruff|mypy|pytest|edge-case|walkthrough>
 
 ## Error
 <exact error output>
@@ -156,15 +159,64 @@ uv run pytest tests/test_edge_*.py -v
 
 **上限：** 最多循环 5 次。同一错误出现 3 次 → 停止并报告根本性问题。
 
-## Step 6: 功能验证
+**走查失败的特殊路径：** 走查失败修复后，先过 Step 2（质量门禁）→ Step 3 → Step 6（重新走查），确保修复没有引入新的静态问题。
 
-质量门禁 + 边缘测试全绿后：
+## Step 6: 启动系统 + 功能走查
+
+**这是最后一道门禁。** 走查不通过不 commit。
+
+### 6a. 启动系统
+
+从 toolchain 文档 `## Walkthrough` 段落读取启动配置：
+
+| 配置项 | 用途 |
+|--------|------|
+| Start Command | 后台启动 dev server |
+| Health Check | 轮询确认 server 就绪 |
+| Shutdown Signal | 关停 server |
+| Port | 端口检测 |
+
+**启动流程**：
+
+1. 检查端口是否已被占用（向 Health Check 端点发请求）
+   - 已占用 → 询问用户是否复用已有实例，还是关停后重启
+   - 空闲 → 继续
+2. 后台启动 dev server（`Start Command`）
+3. 轮询 Health Check 端点，每 2 秒一次，最长等待 30 秒
+   - 就绪 → 继续
+   - 超时 → 报告启动失败，进入 Step 5
+
+### 6b. 分析端点 + 补写走查测试
+
+与 Step 3（主动写边缘测试）同样的模式——缺测试就写，不跳过：
+
+1. 分析代码中已注册的所有端点/功能入口
+2. 对比 `tests/integration/` 中已有的走查测试
+3. 缺失走查测试的端点 → **必须主动编写**对应的走查测试
+4. 编写后运行确认新测试可执行
+
+### 6c. 运行功能走查
+
+```bash
+uv run pytest tests/integration/ -v
+```
+
+- 全部通过 → Step 6d（关停 server），然后 Step 7（功能验证）
+- 任一失败 → Step 6d（关停 server），然后 Step 5（失败处理）
+
+### 6d. 关停系统
+
+走查完成后（无论成功失败），向 server 进程发 SIGTERM。如果进程 5 秒内未退出，发 SIGKILL 强杀。
+
+## Step 7: 功能验证
+
+质量门禁 + 边缘测试 + 功能走查全绿后：
 
 1. 对照当前 item 的验证标准逐条检查
 2. 系统行为不满足验证标准 → 标记阻塞，输出原因，停止
 3. 全部满足 → 更新 item 文档：`- [x] **状态:** 完成`；同步更新 roadmap 中对应 checkbox
 
-## Step 7: 生成 Commit 并提交
+## Step 8: 生成 Commit 并提交
 
 ```bash
 git diff --stat
@@ -195,7 +247,7 @@ EOF
 
 打印：`Committed: <hash> — <subject>`
 
-## Step 8: 下一步提示
+## Step 9: 下一步提示
 
 扫描 roadmap 下一个 `[ ]` 叶子节点，提示：
 ```
@@ -207,6 +259,10 @@ EOF
 
 - **不跳过检查**：任何一道门禁失败都必须进入 Step 5
 - **必须主动写边缘测试**：Step 3 不可跳过，Runner 必须产出至少 1 个边缘测试文件
+- **必须主动写走查测试**：Step 6b 不可跳过，缺失走查测试必须补写
+- **功能走查是最终门禁**：Step 6 不通过不 commit
+- **修复后先过质量门禁**：走查失败修复后必须先过 Step 2，再重新走查
+- **server 必须关停**：Step 6d 无论成功失败都关停，不留残留进程
 - **不改需求**：修复只针对代码，不修改 spec/roadmap/item 中的功能定义
 - **失败上限**：Step 2→5→2 循环最多 5 次；同一错误 3 次即停止
 - **必须先读上下文再跑门禁**：不能跳过 Step 1
