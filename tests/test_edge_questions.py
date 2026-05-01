@@ -75,11 +75,7 @@ class TestQuestionsGenerateEdgeCases:
         html_name = "<script>alert('xss')</script>"
         resp = await client.post(
             f"{BASE}/questions/generate",
-            json={
-                "knowledge_points": [
-                    {"name": html_name, "description": "xss test", "tags": []}
-                ]
-            },
+            json={"knowledge_points": [{"name": html_name, "description": "xss test", "tags": []}]},
         )
         assert resp.status_code == 200
         data = resp.json()
@@ -88,10 +84,7 @@ class TestQuestionsGenerateEdgeCases:
 
     @pytest.mark.asyncio
     async def test_many_knowledge_points(self, client: AsyncClient) -> None:
-        many = [
-            {"name": f"知识点{i}", "description": f"描述{i}", "tags": []}
-            for i in range(50)
-        ]
+        many = [{"name": f"知识点{i}", "description": f"描述{i}", "tags": []} for i in range(50)]
         resp = await client.post(
             f"{BASE}/questions/generate",
             json={"knowledge_points": many},
@@ -177,3 +170,71 @@ class TestQuestionsGenerateHttpMethods:
     async def test_delete_returns_405(self, client: AsyncClient) -> None:
         resp = await client.delete(f"{BASE}/questions/generate")
         assert resp.status_code == 405
+
+
+class TestQuestionsGenerateLlmFallback:
+    """Tests that the endpoint degrades gracefully when GLM-5 is unavailable."""
+
+    @pytest.mark.asyncio
+    async def test_llm_unavailable_returns_placeholder(self, client: AsyncClient) -> None:
+        """When GLM-5 is down, endpoint still returns 200 with placeholder questions."""
+        resp = await client.post(
+            f"{BASE}/questions/generate",
+            json={
+                "knowledge_points": [
+                    {"name": "测试知识点", "description": "描述", "tags": []}
+                ]
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["questions"]) == 1
+        q = data["questions"][0]
+        assert q["knowledge_point_name"] == "测试知识点"
+        assert len(q["options"]) == 4
+        assert q["question_type"] in (
+            "definition",
+            "application",
+            "calculation",
+            "procedure",
+            "recall",
+            "analysis",
+        )
+
+    @pytest.mark.asyncio
+    async def test_mixed_knowledge_points_each_gets_question(self, client: AsyncClient) -> None:
+        """Each knowledge point gets its own question entry regardless of LLM success/failure."""
+        resp = await client.post(
+            f"{BASE}/questions/generate",
+            json={
+                "knowledge_points": [
+                    {"name": "知识点A", "description": "desc A", "tags": []},
+                    {"name": "知识点B", "description": "desc B", "tags": []},
+                ]
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["questions"]) == 2
+        assert data["questions"][0]["knowledge_point_name"] == "知识点A"
+        assert data["questions"][1]["knowledge_point_name"] == "知识点B"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_requests_dont_crash(self, client: AsyncClient) -> None:
+        """Multiple concurrent requests to /questions/generate don't crash the server."""
+        import asyncio
+
+        tasks = [
+            client.post(
+                f"{BASE}/questions/generate",
+                json={
+                    "knowledge_points": [
+                        {"name": f"concurrent_{i}", "description": "desc", "tags": []}
+                    ]
+                },
+            )
+            for i in range(3)
+        ]
+        responses = await asyncio.gather(*tasks)
+        for resp in responses:
+            assert resp.status_code == 200

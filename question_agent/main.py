@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import asyncio
 import os
 import time
 from collections.abc import AsyncGenerator
@@ -29,6 +30,7 @@ from question_agent.knowledge import (
     build_chapter_windows,
     extract_knowledge_points_hybrid,
 )
+from question_agent.questions.llm import category_to_question_type, generate_question_llm
 from question_agent.questions.models import QuestionOption, QuestionStem, QuestionType
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
@@ -619,28 +621,38 @@ async def knowledge_endpoint(file: UploadFile = File(...)) -> JSONResponse:
 
 @app.post("/questions/generate")
 async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
-    """Generate question stubs from a list of knowledge points.
+    """Generate questions from a list of knowledge points.
 
-    Skeleton endpoint — returns placeholder questions for each input knowledge point.
+    Uses GLM-5 to generate question stems; falls back to placeholders
+    if GLM-5 is unavailable.
     """
-    placeholders: list[QuestionStem] = []
+    questions: list[QuestionStem] = []
     for idx, kp in enumerate(request.knowledge_points):
-        category = kp.tags[0].category if kp.tags else "concept"
-        qtype = _category_to_question_type(category)
-        placeholders.append(
-            QuestionStem(
-                id=idx + 1,
-                stem_text=f"关于「{kp.name}」的{qtype}题（占位）",
-                options=[
-                    QuestionOption(label="A", text="选项A（占位）"),
-                    QuestionOption(label="B", text="选项B（占位）"),
-                    QuestionOption(label="C", text="选项C（占位）"),
-                    QuestionOption(label="D", text="选项D（占位）"),
-                ],
-                knowledge_point_name=kp.name,
-                question_type=qtype,
-            )
+        tags_dicts = [{"value": t.value, "category": t.category} for t in kp.tags]
+        result = await asyncio.to_thread(
+            generate_question_llm, name=kp.name, description=kp.description, tags=tags_dicts
         )
+        if result is not None:
+            result.id = idx + 1
+            questions.append(result)
+        else:
+            # Fallback: placeholder question
+            category = kp.tags[0].category if kp.tags else "concept"
+            qtype = category_to_question_type(category)
+            questions.append(
+                QuestionStem(
+                    id=idx + 1,
+                    stem_text=f"关于「{kp.name}」的{qtype}题（占位）",
+                    options=[
+                        QuestionOption(label="A", text="选项A（占位）"),
+                        QuestionOption(label="B", text="选项B（占位）"),
+                        QuestionOption(label="C", text="选项C（占位）"),
+                        QuestionOption(label="D", text="选项D（占位）"),
+                    ],
+                    knowledge_point_name=kp.name,
+                    question_type=qtype,
+                )
+            )
 
     return JSONResponse(
         content=QuestionGenerateResponse(
@@ -653,21 +665,10 @@ async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
                     question_type=q.question_type,
                     metadata=q.metadata,
                 )
-                for q in placeholders
+                for q in questions
             ]
         ).model_dump()
     )
-
-
-def _category_to_question_type(category: str) -> QuestionType:
-    mapping: dict[str, QuestionType] = {
-        "concept": "definition",
-        "formula": "calculation",
-        "procedure": "procedure",
-        "fact": "recall",
-        "principle": "analysis",
-    }
-    return mapping.get(category, "definition")
 
 
 def main() -> None:
