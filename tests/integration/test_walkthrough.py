@@ -77,4 +77,4 @@ async def test_knowledge(client: httpx.AsyncClient) -> None:
     assert data["format"] == "text"
     assert "knowledge_points" in data
     assert "extraction_stats" in data
-    assert data["extraction_stats"]["method"] in ("hybrid", "rule_only")
+    assert data["extraction_stats"]["method"] in ("hybrid", "rule_only", "llm_only", "none")

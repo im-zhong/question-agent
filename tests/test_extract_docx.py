@@ -3,10 +3,9 @@
 import io
 
 import docx
-import httpx
 import pytest
+from httpx import AsyncClient
 
-BASE = "http://localhost:8000"
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
@@ -34,74 +33,68 @@ def _make_docx_with_table() -> bytes:
 
 
 @pytest.mark.asyncio
-async def test_extract_docx_returns_paragraphs():
+async def test_extract_docx_returns_paragraphs(client: AsyncClient):
     docx_bytes = _make_docx(["Para one", "Para two"])
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract",
-            files={"file": ("test.docx", docx_bytes, DOCX_MIME)},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["format"] == "docx"
-        assert "Para one" in data["text"]
-        assert "Para two" in data["text"]
-        assert data["paragraph_count"] == 2
+    resp = await client.post(
+        "/extract",
+        files={"file": ("test.docx", docx_bytes, DOCX_MIME)},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["format"] == "docx"
+    assert "Para one" in data["text"]
+    assert "Para two" in data["text"]
+    assert data["paragraph_count"] == 2
 
 
 @pytest.mark.asyncio
-async def test_extract_docx_heading_style_annotated():
+async def test_extract_docx_heading_style_annotated(client: AsyncClient):
     docx_bytes = _make_docx(["Body text"], heading="Chapter Title")
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract",
-            files={"file": ("test.docx", docx_bytes, DOCX_MIME)},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "[Heading 1]" in data["text"]
-        assert "Chapter Title" in data["text"]
+    resp = await client.post(
+        "/extract",
+        files={"file": ("test.docx", docx_bytes, DOCX_MIME)},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "[Heading 1]" in data["text"]
+    assert "Chapter Title" in data["text"]
 
 
 @pytest.mark.asyncio
-async def test_extract_docx_extracts_table():
+async def test_extract_docx_extracts_table(client: AsyncClient):
     docx_bytes = _make_docx_with_table()
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract",
-            files={"file": ("test.docx", docx_bytes, DOCX_MIME)},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "[Tables]" in data["text"]
-        assert "A | B" in data["text"]
-        assert data["table_count"] == 1
+    resp = await client.post(
+        "/extract",
+        files={"file": ("test.docx", docx_bytes, DOCX_MIME)},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "[Tables]" in data["text"]
+    assert "A | B" in data["text"]
+    assert data["table_count"] == 1
 
 
 @pytest.mark.asyncio
-async def test_extract_docx_invalid_file_returns_422():
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract",
-            files={"file": ("bad.docx", b"not a zip file", DOCX_MIME)},
-        )
-        assert resp.status_code == 422
+async def test_extract_docx_invalid_file_returns_422(client: AsyncClient):
+    resp = await client.post(
+        "/extract",
+        files={"file": ("bad.docx", b"not a zip file", DOCX_MIME)},
+    )
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_extract_docx_missing_file_returns_422():
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{BASE}/extract")
-        assert resp.status_code == 422
+async def test_extract_docx_missing_file_returns_422(client: AsyncClient):
+    resp = await client.post("/extract")
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_extract_docx_page_count_is_null():
+async def test_extract_docx_page_count_is_null(client: AsyncClient):
     docx_bytes = _make_docx(["Content"])
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract",
-            files={"file": ("doc.docx", docx_bytes, DOCX_MIME)},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["page_count"] is None
+    resp = await client.post(
+        "/extract",
+        files={"file": ("doc.docx", docx_bytes, DOCX_MIME)},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["page_count"] is None

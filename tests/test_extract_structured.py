@@ -3,15 +3,13 @@
 import io
 
 import docx
-import httpx
 import pytest
 from fpdf import FPDF
-
-BASE = "http://localhost:8000"
+from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_structured_pdf_paragraph_metadata():
+async def test_structured_pdf_paragraph_metadata(client: AsyncClient):
     """POST /extract?mode=structured on PDF returns per-paragraph font metadata."""
     pdf = FPDF()
     pdf.add_page()
@@ -25,11 +23,10 @@ async def test_structured_pdf_paragraph_metadata():
     pdf.cell(text="Normal text here.")
     pdf_bytes = bytes(pdf.output())
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract?mode=structured",
-            files={"file": ("test.pdf", pdf_bytes, "application/pdf")},
-        )
+    resp = await client.post(
+        "/extract?mode=structured",
+        files={"file": ("test.pdf", pdf_bytes, "application/pdf")},
+    )
 
     assert resp.status_code == 200
     data = resp.json()
@@ -50,7 +47,7 @@ async def test_structured_pdf_paragraph_metadata():
 
 
 @pytest.mark.asyncio
-async def test_structured_docx_style_name():
+async def test_structured_docx_style_name(client: AsyncClient):
     """POST /extract?mode=structured on DOCX returns style_name, no [Heading] prefix."""
     doc = docx.Document()
     doc.add_heading("Chapter 1", level=1)
@@ -62,17 +59,16 @@ async def test_structured_docx_style_name():
     doc.save(buf)
     docx_bytes = buf.getvalue()
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract?mode=structured",
-            files={
-                "file": (
-                    "test.docx",
-                    docx_bytes,
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                )
-            },
-        )
+    resp = await client.post(
+        "/extract?mode=structured",
+        files={
+            "file": (
+                "test.docx",
+                docx_bytes,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
 
     assert resp.status_code == 200
     data = resp.json()
@@ -93,15 +89,14 @@ async def test_structured_docx_style_name():
 
 
 @pytest.mark.asyncio
-async def test_structured_text_null_font_fields():
+async def test_structured_text_null_font_fields(client: AsyncClient):
     """POST /extract?mode=structured on plain text returns null font fields."""
     text_content = "Line one\nLine two\nLine three"
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract?mode=structured",
-            files={"file": ("test.txt", text_content.encode(), "text/plain")},
-        )
+    resp = await client.post(
+        "/extract?mode=structured",
+        files={"file": ("test.txt", text_content.encode(), "text/plain")},
+    )
 
     assert resp.status_code == 200
     data = resp.json()
@@ -118,13 +113,12 @@ async def test_structured_text_null_font_fields():
 
 
 @pytest.mark.asyncio
-async def test_structured_text_empty_file():
+async def test_structured_text_empty_file(client: AsyncClient):
     """POST /extract?mode=structured on empty text file returns empty paragraphs."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract?mode=structured",
-            files={"file": ("empty.txt", b"", "text/plain")},
-        )
+    resp = await client.post(
+        "/extract?mode=structured",
+        files={"file": ("empty.txt", b"", "text/plain")},
+    )
 
     assert resp.status_code == 200
     data = resp.json()
@@ -134,7 +128,7 @@ async def test_structured_text_empty_file():
 
 
 @pytest.mark.asyncio
-async def test_mode_text_unchanged_pdf():
+async def test_mode_text_unchanged_pdf(client: AsyncClient):
     """POST /extract?mode=text on PDF returns flat text (same as before)."""
     pdf = FPDF()
     pdf.add_page()
@@ -142,11 +136,10 @@ async def test_mode_text_unchanged_pdf():
     pdf.cell(text="Hello World")
     pdf_bytes = bytes(pdf.output())
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract?mode=text",
-            files={"file": ("test.pdf", pdf_bytes, "application/pdf")},
-        )
+    resp = await client.post(
+        "/extract?mode=text",
+        files={"file": ("test.pdf", pdf_bytes, "application/pdf")},
+    )
 
     assert resp.status_code == 200
     data = resp.json()
@@ -157,13 +150,12 @@ async def test_mode_text_unchanged_pdf():
 
 
 @pytest.mark.asyncio
-async def test_default_mode_unchanged_text():
+async def test_default_mode_unchanged_text(client: AsyncClient):
     """POST /extract (no mode param) returns flat text (backward compat)."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract",
-            files={"file": ("test.txt", b"hello world", "text/plain")},
-        )
+    resp = await client.post(
+        "/extract",
+        files={"file": ("test.txt", b"hello world", "text/plain")},
+    )
 
     assert resp.status_code == 200
     data = resp.json()
@@ -174,25 +166,23 @@ async def test_default_mode_unchanged_text():
 
 
 @pytest.mark.asyncio
-async def test_structured_invalid_mode_rejected():
+async def test_structured_invalid_mode_rejected(client: AsyncClient):
     """POST /extract?mode=invalid returns 422."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract?mode=invalid",
-            files={"file": ("test.txt", b"test", "text/plain")},
-        )
+    resp = await client.post(
+        "/extract?mode=invalid",
+        files={"file": ("test.txt", b"test", "text/plain")},
+    )
 
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_structured_text_single_line():
+async def test_structured_text_single_line(client: AsyncClient):
     """POST /extract?mode=structured on single line text."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract?mode=structured",
-            files={"file": ("test.txt", b"single line", "text/plain")},
-        )
+    resp = await client.post(
+        "/extract?mode=structured",
+        files={"file": ("test.txt", b"single line", "text/plain")},
+    )
 
     assert resp.status_code == 200
     data = resp.json()

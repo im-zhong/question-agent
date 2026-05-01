@@ -3,23 +3,19 @@
 import io
 
 import docx
-import httpx
 import pytest
 from fpdf import FPDF
-
-BASE = "http://localhost:8000"
-TIMEOUT = 60.0  # /structure invokes LLM which can be slow
+from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_structure_text_chinese_numbering():
+async def test_structure_text_chinese_numbering(client: AsyncClient):
     """POST /structure on Chinese-numbered text returns chapter tree."""
     text = "第一章 引言\n这是引言内容。\n1.1 背景\n背景详细信息。\n第二章 方法\n方法描述。"
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.post(
-            f"{BASE}/structure",
-            files={"file": ("test.txt", text.encode(), "text/plain")},
-        )
+    resp = await client.post(
+        "/structure",
+        files={"file": ("test.txt", text.encode(), "text/plain")},
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["format"] == "text"
@@ -30,7 +26,7 @@ async def test_structure_text_chinese_numbering():
 
 
 @pytest.mark.asyncio
-async def test_structure_docx():
+async def test_structure_docx(client: AsyncClient):
     """POST /structure on DOCX returns chapter tree."""
     doc = docx.Document()
     doc.add_heading("Chapter 1", level=1)
@@ -44,17 +40,16 @@ async def test_structure_docx():
     doc.save(buf)
     docx_bytes = buf.getvalue()
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.post(
-            f"{BASE}/structure",
-            files={
-                "file": (
-                    "test.docx",
-                    docx_bytes,
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                )
-            },
-        )
+    resp = await client.post(
+        "/structure",
+        files={
+            "file": (
+                "test.docx",
+                docx_bytes,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["format"] == "docx"
@@ -69,7 +64,7 @@ async def test_structure_docx():
 
 
 @pytest.mark.asyncio
-async def test_structure_pdf():
+async def test_structure_pdf(client: AsyncClient):
     """POST /structure on PDF returns chapter tree."""
     pdf = FPDF()
     pdf.add_page()
@@ -80,11 +75,10 @@ async def test_structure_pdf():
     pdf.cell(text="Body text here.")
     pdf_bytes = bytes(pdf.output())
 
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.post(
-            f"{BASE}/structure",
-            files={"file": ("test.pdf", pdf_bytes, "application/pdf")},
-        )
+    resp = await client.post(
+        "/structure",
+        files={"file": ("test.pdf", pdf_bytes, "application/pdf")},
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["format"] == "pdf"
@@ -93,34 +87,31 @@ async def test_structure_pdf():
 
 
 @pytest.mark.asyncio
-async def test_structure_no_headings():
+async def test_structure_no_headings(client: AsyncClient):
     """POST /structure on text with no headings returns chapters=null."""
     text = "This is just plain text.\nNo headings here.\nJust content."
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.post(
-            f"{BASE}/structure",
-            files={"file": ("test.txt", text.encode(), "text/plain")},
-        )
+    resp = await client.post(
+        "/structure",
+        files={"file": ("test.txt", text.encode(), "text/plain")},
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["detection_stats"]["total"] == 0
 
 
 @pytest.mark.asyncio
-async def test_structure_unsupported_format():
+async def test_structure_unsupported_format(client: AsyncClient):
     """POST /structure with unsupported format returns 422."""
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.post(
-            f"{BASE}/structure",
-            files={"file": ("test.jpg", b"fake", "image/jpeg")},
-        )
+    resp = await client.post(
+        "/structure",
+        files={"file": ("test.jpg", b"fake", "image/jpeg")},
+    )
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_health_still_works():
+async def test_health_still_works(client: AsyncClient):
     """/health endpoint is not affected by /structure."""
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.get(f"{BASE}/health")
+    resp = await client.get("/health")
     assert resp.status_code == 200
     assert resp.json()["status"] == "healthy"

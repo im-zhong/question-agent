@@ -2,11 +2,9 @@
 
 import io
 
-import httpx
 import pytest
 from fpdf import FPDF
-
-BASE = "http://localhost:8000"
+from httpx import AsyncClient
 
 
 def _make_pdf(texts: list[str]) -> bytes:
@@ -21,56 +19,52 @@ def _make_pdf(texts: list[str]) -> bytes:
 
 
 @pytest.mark.asyncio
-async def test_extract_pdf_returns_text():
+async def test_extract_pdf_returns_text(client: AsyncClient):
     pdf_bytes = _make_pdf(["Hello from PDF"])
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract",
-            files={"file": ("doc.pdf", pdf_bytes, "application/pdf")},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["format"] == "pdf"
-        assert "Hello from PDF" in data["text"]
-        assert data["page_count"] == 1
+    resp = await client.post(
+        "/extract",
+        files={"file": ("doc.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["format"] == "pdf"
+    assert "Hello from PDF" in data["text"]
+    assert data["page_count"] == 1
 
 
 @pytest.mark.asyncio
-async def test_extract_pdf_multi_page():
+async def test_extract_pdf_multi_page(client: AsyncClient):
     pdf_bytes = _make_pdf(["First page text", "Second page text"])
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract",
-            files={"file": ("doc.pdf", pdf_bytes, "application/pdf")},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["format"] == "pdf"
-        assert "--- PAGE BREAK ---" in data["text"]
-        assert "First page text" in data["text"]
-        assert "Second page text" in data["text"]
-        assert data["page_count"] == 2
+    resp = await client.post(
+        "/extract",
+        files={"file": ("doc.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["format"] == "pdf"
+    assert "--- PAGE BREAK ---" in data["text"]
+    assert "First page text" in data["text"]
+    assert "Second page text" in data["text"]
+    assert data["page_count"] == 2
 
 
 @pytest.mark.asyncio
-async def test_extract_pdf_corrupted_returns_422():
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract",
-            files={"file": ("bad.pdf", b"not a pdf at all", "application/pdf")},
-        )
-        assert resp.status_code == 422
+async def test_extract_pdf_corrupted_returns_422(client: AsyncClient):
+    resp = await client.post(
+        "/extract",
+        files={"file": ("bad.pdf", b"not a pdf at all", "application/pdf")},
+    )
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_extract_pdf_missing_file_returns_422():
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{BASE}/extract")
-        assert resp.status_code == 422
+async def test_extract_pdf_missing_file_returns_422(client: AsyncClient):
+    resp = await client.post("/extract")
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
-async def test_extract_pdf_empty_pages_reports_warning():
+async def test_extract_pdf_empty_pages_reports_warning(client: AsyncClient):
     pdf = FPDF()
     pdf.set_font("Helvetica", size=12)
     pdf.add_page()
@@ -79,13 +73,12 @@ async def test_extract_pdf_empty_pages_reports_warning():
     buf = io.BytesIO()
     pdf.output(buf)
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{BASE}/extract",
-            files={"file": ("doc.pdf", buf.getvalue(), "application/pdf")},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["page_count"] == 2
-        assert data["warnings"] is not None
-        assert len(data["warnings"]) == 1
+    resp = await client.post(
+        "/extract",
+        files={"file": ("doc.pdf", buf.getvalue(), "application/pdf")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["page_count"] == 2
+    assert data["warnings"] is not None
+    assert len(data["warnings"]) == 1

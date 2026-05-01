@@ -1,32 +1,27 @@
-"""Smoke tests — verify the running server is healthy and all API docs are accessible."""
+"""Smoke tests — verify the app is healthy and all API docs are accessible."""
 
-import httpx
 import pytest
-
-BASE = "http://localhost:8000"
-
-
-@pytest.mark.asyncio
-async def test_health_returns_200():
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{BASE}/health")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "healthy"
-        assert "version" in data
+from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_docs_accessible():
+async def test_health_returns_200(client: AsyncClient):
+    resp = await client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "healthy"
+    assert "version" in data
+
+
+@pytest.mark.asyncio
+async def test_docs_accessible(client: AsyncClient):
     """Swagger UI should be reachable (debug mode must be on)."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{BASE}/docs")
-        assert resp.status_code == 200
+    resp = await client.get("/docs")
+    assert resp.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_redoc_accessible():
+async def test_redoc_accessible(client: AsyncClient):
     """ReDoc should be reachable (debug mode must be on)."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{BASE}/redoc")
-        assert resp.status_code == 200
+    resp = await client.get("/redoc")
+    assert resp.status_code == 200
