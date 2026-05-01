@@ -165,6 +165,7 @@ Generate the function items document using Write. Follow this exact structure an
 - Document ≤ 200 lines (excluding mermaid code blocks).
 - Each function item ~100-200 lines of code. Don't create 500-line items.
 - Verification specs are BEHAVIOR descriptions, not CLI commands. "GET /health returns 200" not "curl localhost:8000/health".
+- Each 交付 item's verification specs should include a walkthrough test expectation: "tests/integration/test_walkthrough.py covers POST /endpoint" or similar. The run skill will enforce this in Step 6b.
 - Dependencies described in plain text ("依赖 F-1 的 API 骨架"), not JSON DAG.
 - Lifecycle tags:
   - `交付` — final deliverable code, stays in the system

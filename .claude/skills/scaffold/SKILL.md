@@ -104,6 +104,9 @@ pytest --version 2>/dev/null || echo "NOT INSTALLED"
 # 测试基础设施
 ls tests/ 2>/dev/null && echo "EXISTS" || echo "MISSING"
 ls tests/conftest.py 2>/dev/null && echo "EXISTS" || echo "MISSING"
+# Integration test infrastructure
+ls tests/integration/ 2>/dev/null && echo "EXISTS" || echo "MISSING"
+ls tests/integration/conftest.py 2>/dev/null && echo "EXISTS" || echo "MISSING"
 ```
 
 ```bash
@@ -215,8 +218,10 @@ Tier 定义：
 1. uv sync — 同步依赖，确保与 pyproject.toml 和 lockfile 一致
 2. 更新 pyproject.toml — 补充 ruff format 配置和 pytest 选项
 3. 创建 tests/conftest.py — 共享 pytest fixtures（async client, test data）
-4. 创建 logging 配置 — 根据工具链选型初始化日志（格式、handler、级别）
-5. 编写 .editorconfig — 统一缩进和字符集设置
+4. 创建 tests/integration/conftest.py — 集成测试 fixtures（live server client, base_url, reachability check）
+5. 创建 tests/integration/fixtures/ — 集成测试 fixture 文件目录
+6. 创建 logging 配置 — 根据工具链选型初始化日志（格式、handler、级别）
+7. 编写 .editorconfig — 统一缩进和字符集设置
 ```
 
 如果无需操作：
@@ -276,9 +281,11 @@ timeout 5 uv run uvicorn question_agent.main:app --port 8000 2>&1 || true
 **测试环境：**
 ```bash
 uv run pytest --collect-only 2>&1
+uv run pytest tests/integration/ --co -q 2>&1
 ```
 - 确认 pytest 可以收集测试（不要求通过 — 那是 run 的职责）
 - 如果收集数为 0，提示可能需要添加测试
+- Integration test collection confirms the infrastructure is set up (tests may skip if server not running)
 
 任一项失败 → 标记原因，给出诊断建议，不阻塞报告。
 
