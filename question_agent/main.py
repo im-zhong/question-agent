@@ -29,6 +29,7 @@ from question_agent.knowledge import (
     build_chapter_windows,
     extract_knowledge_points_hybrid,
 )
+from question_agent.questions.models import QuestionOption, QuestionStem, QuestionType
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
@@ -119,6 +120,39 @@ class KnowledgeResponse(BaseModel):
     chapters: list[dict[str, Any]] | None = None
     knowledge_points: list[KnowledgePointResponse]
     extraction_stats: KnowledgeExtractionStats
+
+
+class KnowledgeTagInput(BaseModel):
+    value: str
+    category: str
+
+
+class KnowledgePointInput(BaseModel):
+    name: str
+    description: str
+    tags: list[KnowledgeTagInput]
+
+
+class QuestionGenerateRequest(BaseModel):
+    knowledge_points: list[KnowledgePointInput]
+
+
+class QuestionOptionResponse(BaseModel):
+    label: str
+    text: str
+
+
+class QuestionStemResponse(BaseModel):
+    id: int
+    stem_text: str
+    options: list[QuestionOptionResponse]
+    knowledge_point_name: str
+    question_type: QuestionType
+    metadata: dict[str, Any] | None = None
+
+
+class QuestionGenerateResponse(BaseModel):
+    questions: list[QuestionStemResponse]
 
 
 LEGACY_EXTENSIONS = {
@@ -581,6 +615,59 @@ async def knowledge_endpoint(file: UploadFile = File(...)) -> JSONResponse:
             ),
         ).model_dump()
     )
+
+
+@app.post("/questions/generate")
+async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
+    """Generate question stubs from a list of knowledge points.
+
+    Skeleton endpoint — returns placeholder questions for each input knowledge point.
+    """
+    placeholders: list[QuestionStem] = []
+    for idx, kp in enumerate(request.knowledge_points):
+        category = kp.tags[0].category if kp.tags else "concept"
+        qtype = _category_to_question_type(category)
+        placeholders.append(
+            QuestionStem(
+                id=idx + 1,
+                stem_text=f"关于「{kp.name}」的{qtype}题（占位）",
+                options=[
+                    QuestionOption(label="A", text="选项A（占位）"),
+                    QuestionOption(label="B", text="选项B（占位）"),
+                    QuestionOption(label="C", text="选项C（占位）"),
+                    QuestionOption(label="D", text="选项D（占位）"),
+                ],
+                knowledge_point_name=kp.name,
+                question_type=qtype,
+            )
+        )
+
+    return JSONResponse(
+        content=QuestionGenerateResponse(
+            questions=[
+                QuestionStemResponse(
+                    id=q.id,
+                    stem_text=q.stem_text,
+                    options=[QuestionOptionResponse(label=o.label, text=o.text) for o in q.options],
+                    knowledge_point_name=q.knowledge_point_name,
+                    question_type=q.question_type,
+                    metadata=q.metadata,
+                )
+                for q in placeholders
+            ]
+        ).model_dump()
+    )
+
+
+def _category_to_question_type(category: str) -> QuestionType:
+    mapping: dict[str, QuestionType] = {
+        "concept": "definition",
+        "formula": "calculation",
+        "procedure": "procedure",
+        "fact": "recall",
+        "principle": "analysis",
+    }
+    return mapping.get(category, "definition")
 
 
 def main() -> None:

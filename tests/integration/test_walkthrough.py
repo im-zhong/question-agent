@@ -78,3 +78,28 @@ async def test_knowledge(client: httpx.AsyncClient) -> None:
     assert "knowledge_points" in data
     assert "extraction_stats" in data
     assert data["extraction_stats"]["method"] in ("hybrid", "rule_only", "llm_only", "none")
+
+
+@pytest.mark.asyncio
+async def test_questions_generate(client: httpx.AsyncClient) -> None:
+    """POST /questions/generate returns placeholder questions for knowledge points."""
+    resp = await client.post(
+        "/questions/generate",
+        json={
+            "knowledge_points": [
+                {
+                    "name": "牛顿第二定律",
+                    "description": "力等于质量乘以加速度",
+                    "tags": [{"value": "牛顿第二定律", "category": "formula"}],
+                }
+            ]
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "questions" in data
+    assert len(data["questions"]) == 1
+    q = data["questions"][0]
+    assert q["knowledge_point_name"] == "牛顿第二定律"
+    assert q["question_type"] == "calculation"
+    assert len(q["options"]) == 4
