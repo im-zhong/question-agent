@@ -1,3 +1,27 @@
+# Summarize Inline Agent Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Merge summarize-agent's synthesis logic into the summarize skill, making it a pure skill with no subagent delegation.
+
+**Architecture:** Rewrite `.claude/skills/summarize/SKILL.md` Step 3 from "Delegate to summarize-agent" to "Synthesize Report", inlining all agent content (Synthesis_Protocol, Section_Guidance, Success_Criteria, Constraints, Failure_Modes_To_Avoid). Then delete `.claude/agents/summarize-agent.md`.
+
+**Tech Stack:** Markdown skill/agent definitions for Claude Code harness
+
+---
+
+### Task 1: Rewrite summarize SKILL.md
+
+**Files:**
+- Modify: `.claude/skills/summarize/SKILL.md` (full rewrite)
+
+This is a single task because the changes are deeply interconnected — Execution_Policy references Step 3, Tool_Usage references the removed Task() call, Final_Checklist references the removed delegation. Splitting into partial edits would create inconsistent intermediate states.
+
+- [ ] **Step 1: Write the new SKILL.md**
+
+Replace the entire content of `.claude/skills/summarize/SKILL.md` with:
+
+```markdown
 ---
 name: summarize
 description: Phase summary report — bridges iterations by synthesizing code, docs, and web research into a structured handoff for the next pre-dev cycle
@@ -276,3 +300,91 @@ previous: <path to previous summary or null>
   - [ ] 用户看到摘要
   - [ ] state.md 和迭代文件已更新
 </Final_Checklist>
+```
+
+- [ ] **Step 2: Verify the new SKILL.md is syntactically valid**
+
+Run: `cat .claude/skills/summarize/SKILL.md | head -5`
+Expected: Shows the frontmatter with `name: summarize`
+
+Run: `grep -c "summarize-agent" .claude/skills/summarize/SKILL.md`
+Expected: 0 (no references to the removed agent)
+
+Run: `grep -c "Synthesis_Protocol" .claude/skills/summarize/SKILL.md`
+Expected: 1 (the protocol is present)
+
+Run: `grep -c "Synthesis_Rules" .claude/skills/summarize/SKILL.md`
+Expected: 2 (opening and closing tags)
+
+- [ ] **Step 3: Commit the SKILL.md rewrite**
+
+```bash
+git add .claude/skills/summarize/SKILL.md
+git commit -m "refactor(summarize): inline summarize-agent synthesis logic into skill"
+```
+
+---
+
+### Task 2: Delete summarize-agent.md
+
+**Files:**
+- Delete: `.claude/agents/summarize-agent.md`
+
+- [ ] **Step 1: Verify no other files reference summarize-agent**
+
+Run: `grep -r "summarize-agent" .claude/ docs/ --include="*.md" | grep -v "harness-v2-design" | grep -v "refactor-predev-inline-agent-design"`
+Expected: 0 results (the SKILL.md reference was removed in Task 1; the harness-v2-design references are expected since it's the parent spec that planned this deletion)
+
+- [ ] **Step 2: Delete the agent file**
+
+```bash
+git rm .claude/agents/summarize-agent.md
+```
+
+- [ ] **Step 3: Verify deletion**
+
+Run: `ls .claude/agents/`
+Expected: Only `study-agent.md` remains (or empty if other agents were already removed)
+
+- [ ] **Step 4: Commit the deletion**
+
+```bash
+git commit -m "refactor(summarize): remove summarize-agent — logic merged into skill"
+```
+
+---
+
+### Task 3: Final verification
+
+- [ ] **Step 1: Verify no dangling references to summarize-agent**
+
+Run: `grep -r "summarize-agent" . --include="*.md" | grep -v "harness-v2-design" | grep -v "refactor-predev-inline-agent-design" | grep -v ".git/"`
+Expected: 0 results
+
+- [ ] **Step 2: Verify skill structure is complete**
+
+Run: `grep "^### Step" .claude/skills/summarize/SKILL.md`
+Expected:
+```
+### Step 1: Load State
+### Step 2: Collect Context
+### Step 3: Synthesize Report
+### Step 4: Present Summary
+### Step 5: Update State
+```
+
+Run: `grep "^<\|^</" .claude/skills/summarize/SKILL.md`
+Expected output includes all expected blocks:
+- `<Purpose>` / `</Purpose>`
+- `<Use_When>` / `</Use_When>`
+- `<Do_Not_Use_When>` / `</Do_Not_Use_When>`
+- `<Execution_Policy>` / `</Execution_Policy>`
+- `<Steps>` / `</Steps>`
+- `<Synthesis_Rules>` / `</Synthesis_Rules>`
+- `<Tool_Usage>` / `</Tool_Usage>`
+- `<Escalation>` / `</Escalation>`
+- `<Final_Checklist>` / `</Final_Checklist>`
+
+- [ ] **Step 3: Commit verification state if any fixes were needed**
+
+Only if changes were made during verification.
