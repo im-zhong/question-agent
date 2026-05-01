@@ -34,7 +34,7 @@ def _sample_knowledge_points() -> dict:
 
 class TestQuestionsGenerate:
     @pytest.mark.asyncio
-    async def test_generate_returns_placeholder(self, client: AsyncClient) -> None:
+    async def test_generate_returns_questions(self, client: AsyncClient) -> None:
         resp = await client.post(
             f"{BASE}/questions/generate",
             json=_sample_knowledge_points(),
@@ -60,6 +60,7 @@ class TestQuestionsGenerate:
         assert q["options"][3]["label"] == "D"
         assert "knowledge_point_name" in q
         assert "question_type" in q
+        assert "status" in q
         assert "metadata" in q
 
     @pytest.mark.asyncio
@@ -79,9 +80,7 @@ class TestQuestionsGenerate:
             json=_sample_knowledge_points(),
         )
         data = resp.json()
-        # formula -> calculation
         assert data["questions"][0]["question_type"] == "calculation"
-        # concept -> definition
         assert data["questions"][1]["question_type"] == "definition"
 
     @pytest.mark.asyncio
@@ -111,8 +110,52 @@ class TestQuestionsGenerate:
         )
         data = resp.json()
         for q in data["questions"]:
-            # LLM-generated stem_text may paraphrase the knowledge point name
             assert len(q["stem_text"]) > 0
+
+    @pytest.mark.asyncio
+    async def test_generation_stats_present(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            f"{BASE}/questions/generate",
+            json=_sample_knowledge_points(),
+        )
+        data = resp.json()
+        assert "generation_stats" in data
+        stats = data["generation_stats"]
+        assert stats["total"] == 2
+        assert stats["successful"] + stats["failed"] == 2
+
+    @pytest.mark.asyncio
+    async def test_batch_three_plus_knowledge_points(self, client: AsyncClient) -> None:
+        kps = {
+            "knowledge_points": [
+                {"name": f"知识点{i}", "description": f"描述{i}", "tags": []} for i in range(5)
+            ]
+        }
+        resp = await client.post(f"{BASE}/questions/generate", json=kps)
+        data = resp.json()
+        assert len(data["questions"]) == 5
+        assert data["generation_stats"]["total"] == 5
+
+    @pytest.mark.asyncio
+    async def test_status_field_present(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            f"{BASE}/questions/generate",
+            json=_sample_knowledge_points(),
+        )
+        data = resp.json()
+        for q in data["questions"]:
+            assert q["status"] in ("success", "failed")
+
+    @pytest.mark.asyncio
+    async def test_empty_batch_stats(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            f"{BASE}/questions/generate",
+            json={"knowledge_points": []},
+        )
+        data = resp.json()
+        assert data["generation_stats"]["total"] == 0
+        assert data["generation_stats"]["successful"] == 0
+        assert data["generation_stats"]["failed"] == 0
 
 
 class TestExistingEndpointsUnchanged:

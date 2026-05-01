@@ -31,7 +31,11 @@ from question_agent.knowledge import (
     extract_knowledge_points_hybrid,
 )
 from question_agent.questions.llm import category_to_question_type, generate_question_llm
-from question_agent.questions.models import QuestionOption, QuestionStem, QuestionType
+from question_agent.questions.models import (
+    QuestionOption,
+    QuestionStem,
+    QuestionType,
+)
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
@@ -150,11 +154,20 @@ class QuestionStemResponse(BaseModel):
     options: list[QuestionOptionResponse]
     knowledge_point_name: str
     question_type: QuestionType
+    status: str
+    error: str | None = None
     metadata: dict[str, Any] | None = None
+
+
+class QuestionGenerationStats(BaseModel):
+    total: int
+    successful: int
+    failed: int
 
 
 class QuestionGenerateResponse(BaseModel):
     questions: list[QuestionStemResponse]
+    generation_stats: QuestionGenerationStats
 
 
 LEGACY_EXTENSIONS = {
@@ -623,10 +636,11 @@ async def knowledge_endpoint(file: UploadFile = File(...)) -> JSONResponse:
 async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
     """Generate questions from a list of knowledge points.
 
-    Uses GLM-5 to generate question stems; falls back to placeholders
-    if GLM-5 is unavailable.
+    Uses GLM-5 to generate question stems; marks failures with
+    status="failed" and tracks generation statistics.
     """
     questions: list[QuestionStem] = []
+    successful = 0
     for idx, kp in enumerate(request.knowledge_points):
         tags_dicts = [{"value": t.value, "category": t.category} for t in kp.tags]
         result = await asyncio.to_thread(
@@ -634,15 +648,15 @@ async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
         )
         if result is not None:
             result.id = idx + 1
+            successful += 1
             questions.append(result)
         else:
-            # Fallback: placeholder question
             category = kp.tags[0].category if kp.tags else "concept"
             qtype = category_to_question_type(category)
             questions.append(
                 QuestionStem(
                     id=idx + 1,
-                    stem_text=f"关于「{kp.name}」的{qtype}题（占位）",
+                    stem_text=f"关于「{kp.name}」的{qtype}题（生成失败）",
                     options=[
                         QuestionOption(label="A", text="选项A（占位）"),
                         QuestionOption(label="B", text="选项B（占位）"),
@@ -651,8 +665,13 @@ async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
                     ],
                     knowledge_point_name=kp.name,
                     question_type=qtype,
+                    status="failed",
+                    error="GLM-5 生成失败，返回占位题干",
                 )
             )
+
+    total = len(questions)
+    failed = total - successful
 
     return JSONResponse(
         content=QuestionGenerateResponse(
@@ -663,10 +682,15 @@ async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
                     options=[QuestionOptionResponse(label=o.label, text=o.text) for o in q.options],
                     knowledge_point_name=q.knowledge_point_name,
                     question_type=q.question_type,
+                    status=q.status,
+                    error=q.error,
                     metadata=q.metadata,
                 )
                 for q in questions
-            ]
+            ],
+            generation_stats=QuestionGenerationStats(
+                total=total, successful=successful, failed=failed
+            ),
         ).model_dump()
     )
 

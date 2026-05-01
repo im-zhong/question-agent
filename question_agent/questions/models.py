@@ -8,6 +8,8 @@ QuestionType = Literal[
     "definition", "application", "calculation", "procedure", "recall", "analysis"
 ]
 
+QuestionStatus = Literal["success", "failed"]
+
 
 class QuestionOption(BaseModel):
     label: str
@@ -20,4 +22,12 @@ class QuestionStem(BaseModel):
     options: list[QuestionOption]
     knowledge_point_name: str
     question_type: QuestionType
+    status: QuestionStatus = "success"
+    error: str | None = None
     metadata: dict[str, Any] | None = None
+
+
+class GenerationStats(BaseModel):
+    total: int
+    successful: int
+    failed: int
