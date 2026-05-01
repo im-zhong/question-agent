@@ -18,6 +18,12 @@ from question_agent.knowledge.models import ChapterWindow, KnowledgePoint, Knowl
 
 logger = logging.getLogger(__name__)
 
+
+def _create_knowledge_client() -> Any:
+    """Create ZhipuAiClient from settings. Returns None if API key is missing."""
+    return _create_client()
+
+
 _TIMEOUT = 30.0
 _TEMPERATURE = 0.1
 _MAX_TOKENS = 3000
@@ -122,7 +128,7 @@ def extract_knowledge_points_llm(
         return None
 
     if client is None:
-        client = _create_client()
+        client = _create_knowledge_client()
 
     if client is None:
         return None

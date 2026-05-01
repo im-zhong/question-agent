@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from question_agent.chapters.tree import ChapterNode
+from question_agent.chapters import ChapterNode
 from question_agent.knowledge.models import ChapterWindow
 
 
