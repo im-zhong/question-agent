@@ -67,3 +67,12 @@
 ```bash
 uv run ruff check . && uv run ruff format --check . && uv run mypy question_agent/ && uv run pytest
 ```
+
+## Walkthrough
+
+| 配置项 | 值 |
+|--------|-----|
+| Start Command | `uv run question-agent` |
+| Health Check | `GET /docs` → 200 |
+| Shutdown Signal | SIGTERM |
+| Port | 8000 |
