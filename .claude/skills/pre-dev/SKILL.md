@@ -551,6 +551,13 @@ Ask user ONE question about tech preferences using AskUserQuestion:
   - "Prefer TypeScript ecosystem"
   - "Must use specific tools (I'll specify)"
 
+If user chose "Must use specific tools", also ask about logging:
+- "Which logging library?" with options based on language:
+  - Python: "stdlib logging (Recommended)", "structlog", "loguru"
+  - TypeScript/Node: "winston (Recommended)", "pino"
+  - Go: "slog (stdlib, Recommended)"
+If user chose "No preference" → use the (Recommended) default for the detected language. No extra question needed.
+
 Then ask more if needed — no upper limit.
 
 **Generate**
@@ -571,6 +578,7 @@ Generate the toolchain document using Write. Follow this exact structure and con
 | 技术 | 支撑功能 | 选型理由 |
 |------|---------|---------|
 | <!-- tech --> | <!-- which roadmap functions this supports --> | <!-- why this choice --> |
+| stdlib logging | 全模块日志输出 | 零依赖，Python 生态默认选择 |
 
 ## Phase 2+ 候选方向
 
@@ -596,6 +604,7 @@ Generate the toolchain document using Write. Follow this exact structure and con
 - Prefer simplicity. SQLite over PostgreSQL until you need concurrency. Local files over S3 until you need distribution. Single server over microservices until you have traffic.
 - Every choice needs a one-sentence reason.
 - Include at least 1 risk with alternative.
+- Phase 1 技术栈必须包含 Logging 行。默认推荐按语言生态（Python→stdlib logging, TypeScript→winston, Go→slog）。
 - Reuse existing project tech stack where possible.
 
 **Examples:**
@@ -604,6 +613,7 @@ Generate the toolchain document using Write. Follow this exact structure and con
 Phase 1:
 | FastAPI | 题目录入API、分类检索API | 项目已有Python基建，轻量异步框架 |
 | SQLite | 题目存储、分类查询 | 单机轻量，Phase 1无并发需求 |
+| stdlib logging | 全模块日志输出 | 零依赖，Python 默认选择 |
 
 Phase 2+:
 | Phase 2 | PostgreSQL + FTS | 全文搜索 | SQLite搜索性能不足时切换 |
@@ -634,6 +644,7 @@ Read the toolchain file and check:
 - [ ] At least 1 risk with alternative
 - [ ] WebSearch findings recorded
 - [ ] No massive over-engineering (no K8s for single-server apps, no microservices for Phase 1)
+- [ ] Phase 1 包含 Logging 技术选择
 
 **Gate Summary**
 
