@@ -103,3 +103,24 @@ async def test_questions_generate(client: httpx.AsyncClient) -> None:
     assert q["knowledge_point_name"] == "牛顿第二定律"
     assert q["question_type"] == "calculation"
     assert len(q["options"]) == 4
+
+
+@pytest.mark.asyncio
+async def test_questions_generate_from_file(client: httpx.AsyncClient) -> None:
+    """POST /questions/generate/from-file runs full pipeline and returns questions."""
+    text = (
+        "第一章 力学\n牛顿第二定律描述了力等于质量乘以加速度。\n"
+        "加速度是速度变化量与时间的比值。\n"
+        "第二章 电磁学\n欧姆定律表明电流等于电压除以电阻。"
+    )
+    resp = await client.post(
+        "/questions/generate/from-file",
+        files={"file": ("physics.txt", text.encode(), "text/plain")},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["format"] == "text"
+    assert "chapters" in data
+    assert "knowledge_points" in data
+    assert "questions" in data
+    assert "generation_stats" in data
