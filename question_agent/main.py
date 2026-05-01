@@ -1,6 +1,5 @@
 """FastAPI application entry point."""
 
-import asyncio
 import os
 import time
 from collections.abc import AsyncGenerator
@@ -30,12 +29,9 @@ from question_agent.knowledge import (
     build_chapter_windows,
     extract_knowledge_points_hybrid,
 )
-from question_agent.questions.llm import category_to_question_type, generate_question_llm
-from question_agent.questions.models import (
-    QuestionOption,
-    QuestionStem,
-    QuestionType,
-)
+from question_agent.questions import generate_questions
+from question_agent.questions.generator import _KpInput
+from question_agent.questions.models import QuestionType
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
@@ -647,39 +643,16 @@ async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
     Uses GLM-5 to generate question stems; marks failures with
     status="failed" and tracks generation statistics.
     """
-    questions: list[QuestionStem] = []
-    successful = 0
-    for idx, kp in enumerate(request.knowledge_points):
-        tags_dicts = [{"value": t.value, "category": t.category} for t in kp.tags]
-        result = await asyncio.to_thread(
-            generate_question_llm, name=kp.name, description=kp.description, tags=tags_dicts
+    kp_inputs = [
+        _KpInput(
+            name=kp.name,
+            description=kp.description,
+            tags=[{"value": t.value, "category": t.category} for t in kp.tags],
         )
-        if result is not None:
-            result.id = idx + 1
-            successful += 1
-            questions.append(result)
-        else:
-            category = kp.tags[0].category if kp.tags else "concept"
-            qtype = category_to_question_type(category)
-            questions.append(
-                QuestionStem(
-                    id=idx + 1,
-                    stem_text=f"关于「{kp.name}」的{qtype}题（生成失败）",
-                    options=[
-                        QuestionOption(label="A", text="选项A（占位）"),
-                        QuestionOption(label="B", text="选项B（占位）"),
-                        QuestionOption(label="C", text="选项C（占位）"),
-                        QuestionOption(label="D", text="选项D（占位）"),
-                    ],
-                    knowledge_point_name=kp.name,
-                    question_type=qtype,
-                    status="failed",
-                    error="GLM-5 生成失败，返回占位题干",
-                )
-            )
+        for kp in request.knowledge_points
+    ]
 
-    total = len(questions)
-    failed = total - successful
+    questions, gen_stats = await generate_questions(kp_inputs)
 
     return JSONResponse(
         content=QuestionGenerateResponse(
@@ -697,7 +670,7 @@ async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
                 for q in questions
             ],
             generation_stats=QuestionGenerationStats(
-                total=total, successful=successful, failed=failed
+                total=gen_stats.total, successful=gen_stats.successful, failed=gen_stats.failed
             ),
         ).model_dump()
     )
@@ -837,39 +810,15 @@ async def questions_generate_from_file(file: UploadFile = File(...)) -> JSONResp
         )
 
     # Step 6: Generate questions from extracted knowledge points
-    questions: list[QuestionStem] = []
-    successful = 0
-    for idx, kp in enumerate(kp_result["knowledge_points"]):
-        tags_dicts = [{"value": t.value, "category": t.category} for t in kp.tags]
-        result_q = await asyncio.to_thread(
-            generate_question_llm, name=kp.name, description=kp.description, tags=tags_dicts
+    kp_inputs = [
+        _KpInput(
+            name=kp.name,
+            description=kp.description,
+            tags=[{"value": t.value, "category": t.category} for t in kp.tags],
         )
-        if result_q is not None:
-            result_q.id = idx + 1
-            successful += 1
-            questions.append(result_q)
-        else:
-            category = kp.tags[0].category if kp.tags else "concept"
-            qtype = category_to_question_type(category)
-            questions.append(
-                QuestionStem(
-                    id=idx + 1,
-                    stem_text=f"关于「{kp.name}」的{qtype}题（生成失败）",
-                    options=[
-                        QuestionOption(label="A", text="选项A（占位）"),
-                        QuestionOption(label="B", text="选项B（占位）"),
-                        QuestionOption(label="C", text="选项C（占位）"),
-                        QuestionOption(label="D", text="选项D（占位）"),
-                    ],
-                    knowledge_point_name=kp.name,
-                    question_type=qtype,
-                    status="failed",
-                    error="GLM-5 生成失败，返回占位题干",
-                )
-            )
-
-    total = len(questions)
-    failed = total - successful
+        for kp in kp_result["knowledge_points"]
+    ]
+    questions, gen_stats = await generate_questions(kp_inputs)
 
     return JSONResponse(
         content=QuestionFromFileResponse(
@@ -890,7 +839,7 @@ async def questions_generate_from_file(file: UploadFile = File(...)) -> JSONResp
                 for q in questions
             ],
             generation_stats=QuestionGenerationStats(
-                total=total, successful=successful, failed=failed
+                total=gen_stats.total, successful=gen_stats.successful, failed=gen_stats.failed
             ),
         ).model_dump()
     )

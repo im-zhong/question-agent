@@ -6,13 +6,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from question_agent.questions.llm import (
-    PROMPT_REGISTRY,
     _build_user_prompt,
     _parse_response,
-    _select_prompt,
     category_to_question_type,
     generate_question_llm,
 )
+from question_agent.questions.prompts import PROMPT_REGISTRY, select_prompt
 from question_agent.questions.models import QuestionStem
 
 
@@ -218,43 +217,43 @@ class TestPromptRegistry:
 class TestSelectPrompt:
     def test_concept_tag_selects_concept_prompt(self) -> None:
         tags = [{"value": "加速度", "category": "concept"}]
-        prompt = _select_prompt(tags)
+        prompt = select_prompt(tags)
         assert prompt == PROMPT_REGISTRY["concept"]
 
     def test_formula_tag_selects_formula_prompt(self) -> None:
         tags = [{"value": "F=ma", "category": "formula"}]
-        prompt = _select_prompt(tags)
+        prompt = select_prompt(tags)
         assert prompt == PROMPT_REGISTRY["formula"]
 
     def test_procedure_tag(self) -> None:
         tags = [{"value": "实验步骤", "category": "procedure"}]
-        assert _select_prompt(tags) == PROMPT_REGISTRY["procedure"]
+        assert select_prompt(tags) == PROMPT_REGISTRY["procedure"]
 
     def test_fact_tag(self) -> None:
         tags = [{"value": "光速", "category": "fact"}]
-        assert _select_prompt(tags) == PROMPT_REGISTRY["fact"]
+        assert select_prompt(tags) == PROMPT_REGISTRY["fact"]
 
     def test_principle_tag(self) -> None:
         tags = [{"value": "牛顿第三定律", "category": "principle"}]
-        assert _select_prompt(tags) == PROMPT_REGISTRY["principle"]
+        assert select_prompt(tags) == PROMPT_REGISTRY["principle"]
 
     def test_no_tags_returns_generic(self) -> None:
-        from question_agent.questions.llm import _GENERIC_PROMPT
+        from question_agent.questions.prompts import _GENERIC_PROMPT
 
-        assert _select_prompt(None) == _GENERIC_PROMPT
+        assert select_prompt(None) == _GENERIC_PROMPT
 
     def test_unknown_category_returns_generic(self) -> None:
-        from question_agent.questions.llm import _GENERIC_PROMPT
+        from question_agent.questions.prompts import _GENERIC_PROMPT
 
         tags = [{"value": "x", "category": "unknown"}]
-        assert _select_prompt(tags) == _GENERIC_PROMPT
+        assert select_prompt(tags) == _GENERIC_PROMPT
 
     def test_multi_tag_uses_primary(self) -> None:
         tags = [
             {"value": "牛顿定律", "category": "formula"},
             {"value": "牛顿定律", "category": "principle"},
         ]
-        assert _select_prompt(tags) == PROMPT_REGISTRY["formula"]
+        assert select_prompt(tags) == PROMPT_REGISTRY["formula"]
 
 
 class TestCategoryAwareLlmGeneration:
