@@ -24,6 +24,11 @@ from question_agent.extractors import (
     extract_text,
     extract_text_structured,
 )
+from question_agent.knowledge import (
+    ChapterWindow,
+    build_chapter_windows,
+    extract_knowledge_points_hybrid,
+)
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
@@ -83,6 +88,37 @@ class StructureResponse(BaseModel):
     format: str
     chapters: list[dict[str, Any]] | None = None
     detection_stats: DetectionStats
+
+
+class KnowledgeTagResponse(BaseModel):
+    value: str
+    category: str
+
+
+class KnowledgePointResponse(BaseModel):
+    id: int
+    name: str
+    description: str
+    tags: list[KnowledgeTagResponse]
+    confidence: float
+    method: str
+    source_line_start: int
+    source_line_end: int
+    chapter_id: str | None = None
+
+
+class KnowledgeExtractionStats(BaseModel):
+    total: int
+    rule_count: int
+    llm_count: int
+    method: str
+
+
+class KnowledgeResponse(BaseModel):
+    format: str
+    chapters: list[dict[str, Any]] | None = None
+    knowledge_points: list[KnowledgePointResponse]
+    extraction_stats: KnowledgeExtractionStats
 
 
 LEGACY_EXTENSIONS = {
@@ -392,6 +428,157 @@ async def structure_endpoint(file: UploadFile = File(...)) -> JSONResponse:
             format=fmt,
             chapters=chapters_tree,
             detection_stats=stats,
+        ).model_dump()
+    )
+
+
+@app.post("/knowledge")
+async def knowledge_endpoint(file: UploadFile = File(...)) -> JSONResponse:
+    """Extract knowledge points from a document.
+
+    Full pipeline: extract paragraphs → detect chapters → build windows →
+    extract knowledge points (rule + LLM hybrid).
+    """
+    filename = file.filename or ""
+    fmt = _detect_format(filename, file.content_type)
+
+    if fmt is None:
+        ext = os.path.splitext(filename)[1].lower()
+        legacy_hint = LEGACY_EXTENSIONS.get(ext, "")
+        supported = ", ".join(SUPPORTED_FORMATS.keys())
+        detail = f"Unsupported file format. Supported extensions: {supported}"
+        if legacy_hint:
+            detail = f"{detail}. {legacy_hint}"
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=detail,
+        )
+
+    content = await file.read()
+
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File size exceeds 50 MB limit.",
+        )
+
+    # Step 1: Extract structured paragraphs
+    if fmt == "text":
+        paragraphs_list, _ = extract_text_structured(content)
+        page_map = None
+    elif fmt == "pdf":
+        try:
+            result = extract_pdf_structured(content)
+        except ExtractionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            )
+        paragraphs_list = result["paragraphs"]
+        for i, p in enumerate(paragraphs_list):
+            p["line_index"] = i
+        page_map = {
+            p["line_index"]: p["page_number"] for p in paragraphs_list if p.get("page_number")
+        }
+    elif fmt == "docx":
+        try:
+            result = extract_docx_structured(content)
+        except ExtractionError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(e),
+            )
+        paragraphs_list = result["paragraphs"]
+        page_map = None
+        for i, p in enumerate(paragraphs_list):
+            p["line_index"] = i
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Unknown format"
+        )
+
+    # Step 2: Detect chapters (reuse /structure logic)
+    detection = detect_chapters_hybrid(paragraphs_list)
+    headings = detection["headings"]
+    chapters_tree = None
+    chapter_nodes = []
+
+    if headings:
+        line_page_map: dict[int, int] | None = None
+        if page_map:
+            line_page_map = {}
+            for i, p in enumerate(paragraphs_list):
+                pn = p.get("page_number")
+                if pn is not None:
+                    line_page_map[i] = pn
+
+        chapter_nodes = build_chapter_tree(headings, len(paragraphs_list), line_page_map)
+        chapters_tree = [n.to_dict() for n in chapter_nodes]
+
+    # Step 3: Build chapter windows
+    if chapter_nodes:
+        windows = build_chapter_windows(chapter_nodes, paragraphs_list)
+    else:
+        # No chapters — treat entire document as one window
+        all_text = "\n".join(p.get("text") or "" for p in paragraphs_list)
+        windows = (
+            [
+                ChapterWindow(
+                    chapter_id="doc_full",
+                    chapter_title="Full Document",
+                    text=all_text,
+                    line_start=0,
+                    line_end=len(paragraphs_list),
+                )
+            ]
+            if all_text.strip()
+            else []
+        )
+
+    # Step 4: Extract knowledge points
+    kp_result = extract_knowledge_points_hybrid(windows, paragraphs_list)
+
+    # Step 5: Build response with chapter_id association
+    # Map source_line ranges to chapter_id
+    line_to_chapter: dict[int, str] = {}
+    if chapter_nodes:
+        for node in chapter_nodes:
+            for li in range(node.start_line, node.end_line):
+                line_to_chapter[li] = node.id
+
+    kp_responses: list[KnowledgePointResponse] = []
+    for kp in kp_result["knowledge_points"]:
+        # Find chapter_id by checking any line in the KP's range
+        ch_id: str | None = None
+        for li in range(kp.source_line_start, kp.source_line_end):
+            if li in line_to_chapter:
+                ch_id = line_to_chapter[li]
+                break
+        kp_responses.append(
+            KnowledgePointResponse(
+                id=kp.id,
+                name=kp.name,
+                description=kp.description,
+                tags=[KnowledgeTagResponse(value=t.value, category=t.category) for t in kp.tags],
+                confidence=kp.confidence,
+                method=kp.method,
+                source_line_start=kp.source_line_start,
+                source_line_end=kp.source_line_end,
+                chapter_id=ch_id,
+            )
+        )
+
+    return JSONResponse(
+        content=KnowledgeResponse(
+            format=fmt,
+            chapters=chapters_tree,
+            knowledge_points=kp_responses,
+            extraction_stats=KnowledgeExtractionStats(
+                total=len(kp_responses),
+                rule_count=kp_result["rule_count"],
+                llm_count=kp_result["llm_count"],
+                method=kp_result["detection_method"],
+            ),
         ).model_dump()
     )
 
