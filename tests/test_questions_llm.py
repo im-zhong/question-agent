@@ -11,8 +11,8 @@ from question_agent.questions.llm import (
     category_to_question_type,
     generate_question_llm,
 )
-from question_agent.questions.prompts import PROMPT_REGISTRY, select_prompt
 from question_agent.questions.models import QuestionStem
+from question_agent.questions.prompts import PROMPT_REGISTRY, select_prompt
 
 
 class TestBuildUserPrompt:
