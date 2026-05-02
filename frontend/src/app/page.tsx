@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const API_URL = "/api";
@@ -20,6 +21,23 @@ interface QuestionOption {
   text: string;
 }
 
+interface Chapter {
+  level: number;
+  title: string;
+  children: Chapter[];
+}
+
+interface KnowledgePointTag {
+  value: string;
+  category: string;
+}
+
+interface KnowledgePoint {
+  name: string;
+  description: string;
+  tags: KnowledgePointTag[];
+}
+
 interface Question {
   id: number;
   stem_text: string;
@@ -36,6 +54,8 @@ interface GenerationStats {
 }
 
 interface GenerationResult {
+  chapters: Chapter[];
+  knowledge_points: KnowledgePoint[];
   questions: Question[];
   generation_stats: GenerationStats;
 }
@@ -178,139 +198,362 @@ function FileUpload() {
 
   return (
     <div>
-      <div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed py-20 text-center transition-colors ${
-          isDragOver
-            ? "border-primary bg-primary/5"
-            : "border-border hover:border-primary/50"
-        }`}
-        onClick={() => inputRef.current?.click()}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
-        }}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".pdf,.docx,.txt"
-          className="hidden"
-          onChange={handleInputChange}
-        />
-        <div className="mb-4 text-muted-foreground/50">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="48"
-            height="48"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+      {result ? (
+        <StructuredResult result={result} onReset={handleClear} />
+      ) : (
+        <>
+          <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed py-20 text-center transition-colors ${
+              isDragOver
+                ? "border-primary bg-primary/5"
+                : "border-border hover:border-primary/50"
+            }`}
+            onClick={() => inputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+            }}
           >
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-        </div>
-        <p className="mb-2 text-lg font-medium text-foreground">
-          {isDragOver ? "释放文件以上传" : "上传教材文件开始出题"}
-        </p>
-        <p className="mb-6 text-sm text-muted-foreground">支持 PDF、Word、纯文本格式</p>
-        <Button variant="outline" type="button" onClick={(e) => e.stopPropagation()}>
-          选择文件
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".pdf,.docx,.txt"
+              className="hidden"
+              onChange={handleInputChange}
+            />
+            <div className="mb-4 text-muted-foreground/50">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="48"
+                height="48"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            </div>
+            <p className="mb-2 text-lg font-medium text-foreground">
+              {isDragOver ? "释放文件以上传" : "上传教材文件开始出题"}
+            </p>
+            <p className="mb-6 text-sm text-muted-foreground">支持 PDF、Word、纯文本格式</p>
+            <Button variant="outline" type="button" onClick={(e) => e.stopPropagation()}>
+              选择文件
+            </Button>
+          </div>
+
+          {error && (
+            <Card className="mt-4 border-destructive/50 bg-destructive/5">
+              <CardContent className="py-3 text-sm text-destructive">{error}</CardContent>
+            </Card>
+          )}
+
+          {selectedFile && (
+            <Card className="mt-4">
+              <CardContent className="flex items-center justify-between py-3">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex size-8 items-center justify-center rounded bg-primary/10 text-xs font-medium text-primary">
+                    {selectedFile.name.split(".").pop()?.toUpperCase()}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{selectedFile.name}</p>
+                    <p className="text-xs text-muted-foreground">{formatFileSize(selectedFile.size)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleGenerate}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? "生成中..." : "生成题目"}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleClear}>
+                    移除
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {isLoading && (
+            <div className="mt-6 text-center text-sm text-muted-foreground">
+              <span className="inline-block animate-pulse">正在生成题目，请稍候（可能需要 10-30 秒）...</span>
+            </div>
+          )}
+
+          {apiError && (
+            <Card className="mt-4 border-destructive/50 bg-destructive/5">
+              <CardContent className="py-3 text-sm text-destructive">{apiError}</CardContent>
+            </Card>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Structured result display components ── */
+
+const CATEGORY_COLORS: Record<string, string> = {
+  concept: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  formula: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  procedure: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  fact: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  principle: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  concept: "概念",
+  formula: "公式",
+  procedure: "过程",
+  fact: "事实",
+  principle: "原理",
+};
+
+const QUESTION_TYPE_LABELS: Record<string, string> = {
+  definition: "定义",
+  calculation: "计算",
+  analysis: "分析",
+  verification: "验证",
+  application: "应用",
+};
+
+const QUESTION_TYPE_COLORS: Record<string, string> = {
+  definition: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
+  calculation: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
+  analysis: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
+  verification: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
+  application: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+};
+
+function StructuredResult({
+  result,
+  onReset,
+}: {
+  result: GenerationResult;
+  onReset: () => void;
+}) {
+  const { chapters, knowledge_points, questions, generation_stats } = result;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">生成结果</h2>
+        <Button variant="outline" size="sm" onClick={onReset}>
+          重新上传
         </Button>
       </div>
 
-      {error && (
-        <Card className="mt-4 border-destructive/50 bg-destructive/5">
-          <CardContent className="py-3 text-sm text-destructive">{error}</CardContent>
-        </Card>
+      <StatsCard stats={generation_stats} />
+
+      {chapters.length > 0 && <ChaptersSection chapters={chapters} />}
+
+      {knowledge_points.length > 0 && (
+        <KnowledgePointsSection knowledgePoints={knowledge_points} />
       )}
 
-      {selectedFile && (
-        <Card className="mt-4">
-          <CardContent className="flex items-center justify-between py-3">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex size-8 items-center justify-center rounded bg-primary/10 text-xs font-medium text-primary">
-                {selectedFile.name.split(".").pop()?.toUpperCase()}
-              </span>
-              <div>
-                <p className="text-sm font-medium text-foreground">{selectedFile.name}</p>
-                <p className="text-xs text-muted-foreground">{formatFileSize(selectedFile.size)}</p>
+      <QuestionsSection questions={questions} />
+    </div>
+  );
+}
+
+function StatsCard({ stats }: { stats: GenerationStats }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>生成统计</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-8 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="inline-block size-2.5 rounded-full bg-muted-foreground" />
+            <span>总计: {stats.total}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block size-2.5 rounded-full bg-green-500" />
+            <span>成功: {stats.successful}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block size-2.5 rounded-full bg-red-500" />
+            <span>失败: {stats.failed}</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChaptersSection({ chapters }: { chapters: Chapter[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>章节结构</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-1">
+          {chapters.map((chapter, i) => (
+            <ChapterNode key={i} chapter={chapter} />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChapterNode({ chapter }: { chapter: Chapter }) {
+  const hasChildren = chapter.children.length > 0;
+
+  if (!hasChildren) {
+    return (
+      <div
+        className="py-1 text-sm text-foreground"
+        style={{ paddingLeft: `${(chapter.level - 1) * 1.25}rem` }}
+      >
+        {chapter.title}
+      </div>
+    );
+  }
+
+  return (
+    <details open className="group">
+      <summary
+        className="cursor-pointer py-1 text-sm font-medium text-foreground hover:text-primary"
+        style={{ paddingLeft: `${(chapter.level - 1) * 1.25}rem` }}
+      >
+        {chapter.title}
+      </summary>
+      <div className="space-y-0.5">
+        {chapter.children.map((child, i) => (
+          <ChapterNode key={i} chapter={child} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function KnowledgePointsSection({ knowledgePoints }: { knowledgePoints: KnowledgePoint[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>知识点 ({knowledgePoints.length})</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {knowledgePoints.map((kp, i) => (
+            <div key={i} className="rounded-lg border p-3">
+              <div className="flex items-start justify-between gap-2">
+                <h4 className="text-sm font-medium text-foreground">{kp.name}</h4>
+                <div className="flex shrink-0 flex-wrap gap-1">
+                  {kp.tags.map((tag, j) => (
+                    <span
+                      key={j}
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                        CATEGORY_COLORS[tag.category] ?? "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {CATEGORY_LABELS[tag.category] ?? tag.category}
+                    </span>
+                  ))}
+                </div>
               </div>
+              {kp.description && (
+                <p className="mt-1 text-xs text-muted-foreground">{kp.description}</p>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                onClick={handleGenerate}
-                disabled={isLoading}
-              >
-                {isLoading ? "生成中..." : "生成题目"}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handleClear}>
-                移除
-              </Button>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuestionsSection({ questions }: { questions: Question[] }) {
+  const successQuestions = questions.filter((q) => q.status === "success");
+  const failedQuestions = questions.filter((q) => q.status === "failed");
+
+  return (
+    <div className="space-y-4">
+      {successQuestions.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>题目 ({successQuestions.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {successQuestions.map((q, i) => (
+                <QuestionCard key={q.id} question={q} index={i + 1} />
+              ))}
             </div>
           </CardContent>
         </Card>
       )}
 
-      {isLoading && (
-        <div className="mt-6 text-center text-sm text-muted-foreground">
-          <span className="inline-block animate-pulse">正在生成题目，请稍候（可能需要 10-30 秒）...</span>
-        </div>
-      )}
-
-      {apiError && (
-        <Card className="mt-4 border-destructive/50 bg-destructive/5">
-          <CardContent className="py-3 text-sm text-destructive">{apiError}</CardContent>
+      {failedQuestions.length > 0 && (
+        <Card className="border-red-200 dark:border-red-800">
+          <CardHeader>
+            <CardTitle className="text-red-600 dark:text-red-400">
+              生成失败 ({failedQuestions.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {failedQuestions.map((q) => (
+                <div
+                  key={q.id}
+                  className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950"
+                >
+                  <p className="text-sm text-red-800 dark:text-red-200">
+                    知识点「{q.knowledge_point_name}」题目生成失败
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
 
-      {result && (
-        <div className="mt-6 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>生成统计</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex gap-6 text-sm">
-                <span>总计: {result.generation_stats.total}</span>
-                <span className="text-green-600">成功: {result.generation_stats.successful}</span>
-                <span className="text-red-600">失败: {result.generation_stats.failed}</span>
-              </div>
-            </CardContent>
-          </Card>
+function QuestionCard({ question, index }: { question: Question; index: number }) {
+  return (
+    <div className="rounded-lg border p-4">
+      <div className="flex items-start justify-between gap-2">
+        <h4 className="text-sm font-medium text-foreground">
+          {index}. {question.stem_text}
+        </h4>
+        <Badge
+          variant="outline"
+          className={`shrink-0 ${QUESTION_TYPE_COLORS[question.question_type] ?? ""}`}
+        >
+          {QUESTION_TYPE_LABELS[question.question_type] ?? question.question_type}
+        </Badge>
+      </div>
 
-          {result.questions
-            .filter((q) => q.status === "success")
-            .map((q) => (
-              <Card key={q.id}>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    {q.id}. {q.stem_text}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-1 text-sm">
-                  {q.options.map((opt) => (
-                    <div key={opt.label}>
-                      <span className="font-medium">{opt.label}.</span> {opt.text}
-                    </div>
-                  ))}
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    知识点: {q.knowledge_point_name} | 类型: {q.question_type}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-        </div>
-      )}
+      <div className="mt-3 space-y-1.5">
+        {question.options.map((opt) => (
+          <div key={opt.label} className="flex items-start gap-2 text-sm">
+            <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+              {opt.label}
+            </span>
+            <span className="text-foreground">{opt.text}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 text-xs text-muted-foreground">
+        知识点: {question.knowledge_point_name}
+      </div>
     </div>
   );
 }
