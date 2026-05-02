@@ -90,7 +90,7 @@ export default function Home() {
       </header>
 
       <main className="mx-auto max-w-4xl px-6 py-8">
-        <FileUpload />
+        <FileUpload healthStatus={healthStatus} />
       </main>
     </div>
   );
@@ -113,7 +113,7 @@ function HealthIndicator({ status }: { status: HealthStatus }) {
   );
 }
 
-function FileUpload() {
+function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -172,6 +172,10 @@ function FileUpload() {
 
   const handleGenerate = useCallback(async () => {
     if (!selectedFile) return;
+    if (healthStatus === "disconnected") {
+      setApiError("无法连接后端服务，请确认后端已启动");
+      return;
+    }
     setIsLoading(true);
     setApiError(null);
     setResult(null);
@@ -184,17 +188,40 @@ function FileUpload() {
         body: formData,
       });
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `请求失败 (${res.status})`);
+        throw res;
       }
       const data: GenerationResult = await res.json();
       setResult(data);
     } catch (err) {
-      setApiError(err instanceof Error ? err.message : "生成题目时发生未知错误");
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        setApiError("无法连接后端服务，请确认后端已启动");
+      } else if (err instanceof Response) {
+        let detail = "";
+        try {
+          detail = await err.text();
+        } catch {
+          // ignore text extraction failure
+        }
+        switch (err.status) {
+          case 413:
+            setApiError("文件过大，请选择更小的文件");
+            break;
+          case 422:
+            setApiError("文件格式无法解析，请检查文件内容");
+            break;
+          case 500:
+            setApiError("后端处理出错，请稍后重试");
+            break;
+          default:
+            setApiError(detail || `请求失败 (${err.status})`);
+        }
+      } else {
+        setApiError(err instanceof Error ? err.message : "生成题目时发生未知错误");
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [selectedFile]);
+  }, [selectedFile, healthStatus]);
 
   return (
     <div>
@@ -273,7 +300,7 @@ function FileUpload() {
                   <Button
                     size="sm"
                     onClick={handleGenerate}
-                    disabled={isLoading}
+                    disabled={isLoading || healthStatus === "disconnected"}
                   >
                     {isLoading ? "生成中..." : "生成题目"}
                   </Button>
@@ -293,7 +320,12 @@ function FileUpload() {
 
           {apiError && (
             <Card className="mt-4 border-destructive/50 bg-destructive/5">
-              <CardContent className="py-3 text-sm text-destructive">{apiError}</CardContent>
+              <CardContent className="flex items-center justify-between py-3">
+                <p className="text-sm text-destructive">{apiError}</p>
+                <Button variant="outline" size="sm" onClick={handleGenerate} disabled={isLoading}>
+                  重试
+                </Button>
+              </CardContent>
             </Card>
           )}
         </>
@@ -336,6 +368,16 @@ const QUESTION_TYPE_COLORS: Record<string, string> = {
   application: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
 };
 
+function EmptyState({ message }: { message: string }) {
+  return (
+    <Card>
+      <CardContent className="py-8 text-center text-sm text-muted-foreground">
+        {message}
+      </CardContent>
+    </Card>
+  );
+}
+
 function StructuredResult({
   result,
   onReset,
@@ -344,6 +386,9 @@ function StructuredResult({
   onReset: () => void;
 }) {
   const { chapters, knowledge_points, questions, generation_stats } = result;
+
+  const hasSuccess = questions.some((q) => q.status === "success");
+  const hasFailed = questions.some((q) => q.status === "failed");
 
   return (
     <div className="space-y-6">
@@ -358,11 +403,17 @@ function StructuredResult({
 
       {chapters.length > 0 && <ChaptersSection chapters={chapters} />}
 
-      {knowledge_points.length > 0 && (
+      {knowledge_points.length > 0 ? (
         <KnowledgePointsSection knowledgePoints={knowledge_points} />
+      ) : (
+        <EmptyState message="未提取到知识点" />
       )}
 
-      <QuestionsSection questions={questions} />
+      {hasSuccess || hasFailed ? (
+        <QuestionsSection questions={questions} />
+      ) : (
+        <EmptyState message="未成功生成任何题目" />
+      )}
     </div>
   );
 }
@@ -510,11 +561,16 @@ function QuestionsSection({ questions }: { questions: Question[] }) {
               {failedQuestions.map((q) => (
                 <div
                   key={q.id}
-                  className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-950"
+                  className="rounded-lg border border-red-200 border-l-4 border-l-red-500 bg-red-50 p-3 dark:border-red-800 dark:border-l-red-400 dark:bg-red-950"
                 >
-                  <p className="text-sm text-red-800 dark:text-red-200">
-                    知识点「{q.knowledge_point_name}」题目生成失败
-                  </p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm text-red-800 dark:text-red-200">
+                      知识点「{q.knowledge_point_name}」
+                    </p>
+                    <Badge variant="destructive" className="shrink-0 text-xs">
+                      生成失败
+                    </Badge>
+                  </div>
                 </div>
               ))}
             </div>
