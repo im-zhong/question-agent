@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const API_URL = "/api";
 
@@ -14,6 +14,31 @@ const ACCEPTED_MIME_TYPES = [
 ];
 
 type HealthStatus = "checking" | "connected" | "disconnected";
+
+interface QuestionOption {
+  label: string;
+  text: string;
+}
+
+interface Question {
+  id: number;
+  stem_text: string;
+  options: QuestionOption[];
+  knowledge_point_name: string;
+  question_type: string;
+  status: string;
+}
+
+interface GenerationStats {
+  total: number;
+  successful: number;
+  failed: number;
+}
+
+interface GenerationResult {
+  questions: Question[];
+  generation_stats: GenerationStats;
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -72,10 +97,15 @@ function FileUpload() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [result, setResult] = useState<GenerationResult | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback((file: File) => {
     setError(null);
+    setApiError(null);
+    setResult(null);
     if (!isAcceptedFile(file)) {
       setSelectedFile(null);
       setError("不支持的文件格式，请选择 PDF、Word 或纯文本文件");
@@ -115,8 +145,36 @@ function FileUpload() {
   const handleClear = useCallback(() => {
     setSelectedFile(null);
     setError(null);
+    setApiError(null);
+    setResult(null);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
+
+  const handleGenerate = useCallback(async () => {
+    if (!selectedFile) return;
+    setIsLoading(true);
+    setApiError(null);
+    setResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      const res = await fetch(`${API_URL}/questions/generate/from-file`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `请求失败 (${res.status})`);
+      }
+      const data: GenerationResult = await res.json();
+      setResult(data);
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : "生成题目时发生未知错误");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedFile]);
 
   return (
     <div>
@@ -187,11 +245,71 @@ function FileUpload() {
                 <p className="text-xs text-muted-foreground">{formatFileSize(selectedFile.size)}</p>
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleClear}>
-              移除
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={handleGenerate}
+                disabled={isLoading}
+              >
+                {isLoading ? "生成中..." : "生成题目"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleClear}>
+                移除
+              </Button>
+            </div>
           </CardContent>
         </Card>
+      )}
+
+      {isLoading && (
+        <div className="mt-6 text-center text-sm text-muted-foreground">
+          <span className="inline-block animate-pulse">正在生成题目，请稍候（可能需要 10-30 秒）...</span>
+        </div>
+      )}
+
+      {apiError && (
+        <Card className="mt-4 border-destructive/50 bg-destructive/5">
+          <CardContent className="py-3 text-sm text-destructive">{apiError}</CardContent>
+        </Card>
+      )}
+
+      {result && (
+        <div className="mt-6 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>生成统计</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-6 text-sm">
+                <span>总计: {result.generation_stats.total}</span>
+                <span className="text-green-600">成功: {result.generation_stats.successful}</span>
+                <span className="text-red-600">失败: {result.generation_stats.failed}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {result.questions
+            .filter((q) => q.status === "success")
+            .map((q) => (
+              <Card key={q.id}>
+                <CardHeader>
+                  <CardTitle className="text-base">
+                    {q.id}. {q.stem_text}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  {q.options.map((opt) => (
+                    <div key={opt.label}>
+                      <span className="font-medium">{opt.label}.</span> {opt.text}
+                    </div>
+                  ))}
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    知识点: {q.knowledge_point_name} | 类型: {q.question_type}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+        </div>
       )}
     </div>
   );
