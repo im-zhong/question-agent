@@ -49,19 +49,24 @@ async def generate_questions(
     Returns:
         Tuple of (questions, generation_stats).
     """
+    results: list[QuestionStem | None] = await asyncio.gather(
+        *[
+            asyncio.to_thread(
+                generate_question_llm, name=kp.name, description=kp.description, tags=kp.tags
+            )
+            for kp in knowledge_points
+        ]
+    )
+
     questions: list[QuestionStem] = []
     successful = 0
-
-    for idx, kp in enumerate(knowledge_points):
-        result = await asyncio.to_thread(
-            generate_question_llm, name=kp.name, description=kp.description, tags=kp.tags
-        )
+    for idx, result in enumerate(results):
         if result is not None:
             result.id = idx + 1
             successful += 1
             questions.append(result)
         else:
-            questions.append(_make_failed_stem(idx + 1, kp))
+            questions.append(_make_failed_stem(idx + 1, knowledge_points[idx]))
 
     total = len(questions)
     failed = total - successful

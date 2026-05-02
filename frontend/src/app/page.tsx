@@ -183,17 +183,27 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
-      const res = await fetch(`${API_URL}/questions/generate/from-file`, {
-        method: "POST",
-        body: formData,
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120_000);
+      let res: Response;
+      try {
+        res = await fetch(`${API_URL}/questions/generate/from-file`, {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
       if (!res.ok) {
         throw res;
       }
       const data: GenerationResult = await res.json();
       setResult(data);
     } catch (err) {
-      if (err instanceof TypeError && err.message === "Failed to fetch") {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setApiError("请求超时，文件可能过大或内容过多，请稍后重试");
+      } else if (err instanceof TypeError && err.message === "Failed to fetch") {
         setApiError("无法连接后端服务，请确认后端已启动");
       } else if (err instanceof Response) {
         let detail = "";
