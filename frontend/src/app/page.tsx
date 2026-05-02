@@ -82,14 +82,14 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-6 py-4">
+      <header className="border-b border-border px-4 py-4 sm:px-6">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
           <h1 className="text-xl font-semibold tracking-tight">智能出题</h1>
           <HealthIndicator status={healthStatus} />
         </div>
       </header>
 
-      <main className="mx-auto max-w-4xl px-6 py-8">
+      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
         <FileUpload healthStatus={healthStatus} />
       </main>
     </div>
@@ -233,7 +233,7 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed py-20 text-center transition-colors ${
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed py-12 sm:py-20 text-center transition-colors ${
               isDragOver
                 ? "border-primary bg-primary/5"
                 : "border-border hover:border-primary/50"
@@ -286,17 +286,17 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
 
           {selectedFile && (
             <Card className="mt-4">
-              <CardContent className="flex items-center justify-between py-3">
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex size-8 items-center justify-center rounded bg-primary/10 text-xs font-medium text-primary">
+              <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="inline-flex size-8 shrink-0 items-center justify-center rounded bg-primary/10 text-xs font-medium text-primary">
                     {selectedFile.name.split(".").pop()?.toUpperCase()}
                   </span>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">{selectedFile.name}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{selectedFile.name}</p>
                     <p className="text-xs text-muted-foreground">{formatFileSize(selectedFile.size)}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <Button
                     size="sm"
                     onClick={handleGenerate}
@@ -320,8 +320,8 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
 
           {apiError && (
             <Card className="mt-4 border-destructive/50 bg-destructive/5">
-              <CardContent className="flex items-center justify-between py-3">
-                <p className="text-sm text-destructive">{apiError}</p>
+              <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-destructive break-words">{apiError}</p>
                 <Button variant="outline" size="sm" onClick={handleGenerate} disabled={isLoading}>
                   重试
                 </Button>
@@ -425,7 +425,7 @@ function StatsCard({ stats }: { stats: GenerationStats }) {
         <CardTitle>生成统计</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex gap-8 text-sm">
+        <div className="flex flex-wrap gap-4 sm:gap-8 text-sm">
           <div className="flex items-center gap-2">
             <span className="inline-block size-2.5 rounded-full bg-muted-foreground" />
             <span>总计: {stats.total}</span>
@@ -467,7 +467,7 @@ function ChapterNode({ chapter }: { chapter: Chapter }) {
   if (!hasChildren) {
     return (
       <div
-        className="py-1 text-sm text-foreground"
+        className="py-1 text-sm text-foreground break-words"
         style={{ paddingLeft: `${(chapter.level - 1) * 1.25}rem` }}
       >
         {chapter.title}
@@ -476,9 +476,9 @@ function ChapterNode({ chapter }: { chapter: Chapter }) {
   }
 
   return (
-    <details open className="group">
+    <details open>
       <summary
-        className="cursor-pointer py-1 text-sm font-medium text-foreground hover:text-primary"
+        className="cursor-pointer py-1 text-sm font-medium text-foreground hover:text-primary break-words"
         style={{ paddingLeft: `${(chapter.level - 1) * 1.25}rem` }}
       >
         {chapter.title}
@@ -502,8 +502,8 @@ function KnowledgePointsSection({ knowledgePoints }: { knowledgePoints: Knowledg
         <div className="space-y-3">
           {knowledgePoints.map((kp, i) => (
             <div key={i} className="rounded-lg border p-3">
-              <div className="flex items-start justify-between gap-2">
-                <h4 className="text-sm font-medium text-foreground">{kp.name}</h4>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <h4 className="text-sm font-medium text-foreground break-words">{kp.name}</h4>
                 <div className="flex shrink-0 flex-wrap gap-1">
                   {kp.tags.map((tag, j) => (
                     <span
@@ -518,7 +518,7 @@ function KnowledgePointsSection({ knowledgePoints }: { knowledgePoints: Knowledg
                 </div>
               </div>
               {kp.description && (
-                <p className="mt-1 text-xs text-muted-foreground">{kp.description}</p>
+                <p className="mt-1 text-xs text-muted-foreground break-words">{kp.description}</p>
               )}
             </div>
           ))}
@@ -563,8 +563,8 @@ function QuestionsSection({ questions }: { questions: Question[] }) {
                   key={q.id}
                   className="rounded-lg border border-red-200 border-l-4 border-l-red-500 bg-red-50 p-3 dark:border-red-800 dark:border-l-red-400 dark:bg-red-950"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm text-red-800 dark:text-red-200">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-red-800 dark:text-red-200 break-words">
                       知识点「{q.knowledge_point_name}」
                     </p>
                     <Badge variant="destructive" className="shrink-0 text-xs">
@@ -584,12 +584,12 @@ function QuestionsSection({ questions }: { questions: Question[] }) {
 function QuestionCard({ question, index }: { question: Question; index: number }) {
   return (
     <div className="rounded-lg border p-4">
-      <div className="flex items-start justify-between gap-2">
-        <h4 className="text-sm font-medium text-foreground">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h4 className="text-sm font-medium text-foreground break-words">
           {index}. {question.stem_text}
         </h4>
         <Badge
-          variant="outline"
+          variant="secondary"
           className={`shrink-0 ${QUESTION_TYPE_COLORS[question.question_type] ?? ""}`}
         >
           {QUESTION_TYPE_LABELS[question.question_type] ?? question.question_type}
@@ -602,12 +602,12 @@ function QuestionCard({ question, index }: { question: Question; index: number }
             <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
               {opt.label}
             </span>
-            <span className="text-foreground">{opt.text}</span>
+            <span className="text-foreground break-words">{opt.text}</span>
           </div>
         ))}
       </div>
 
-      <div className="mt-3 text-xs text-muted-foreground">
+      <div className="mt-3 text-xs text-muted-foreground break-words">
         知识点: {question.knowledge_point_name}
       </div>
     </div>
