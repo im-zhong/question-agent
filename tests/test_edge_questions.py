@@ -180,11 +180,7 @@ class TestQuestionsGenerateLlmFallback:
         """When GLM-5 is down, endpoint still returns 200 with placeholder questions."""
         resp = await client.post(
             f"{BASE}/questions/generate",
-            json={
-                "knowledge_points": [
-                    {"name": "测试知识点", "description": "描述", "tags": []}
-                ]
-            },
+            json={"knowledge_points": [{"name": "测试知识点", "description": "描述", "tags": []}]},
         )
         assert resp.status_code == 200
         data = resp.json()
