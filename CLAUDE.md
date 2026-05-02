@@ -2,7 +2,20 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Monorepo Structure
+
+```
+question-agent-v1/
+├── question_agent/    # Python backend (FastAPI)
+├── frontend/          # Next.js frontend (React + TypeScript + Tailwind + shadcn/ui)
+├── tests/             # Python tests
+├── docs/              # Pre-dev documentation
+└── .harness/          # Toolchain config
+```
+
 ## Commands
+
+### Backend (Python)
 
 ```bash
 # All checks (lint + format check + type check + tests)
@@ -20,11 +33,46 @@ uv run pytest --ignore=tests/integration/ -v
 
 Always use `uv run <tool>` — ruff, mypy, and pytest are dev dependencies, not globally installed.
 
+### Frontend (Next.js)
+
+```bash
+# Dev server (from frontend/ directory)
+cd frontend && npm run dev
+
+# Lint
+cd frontend && npm run lint
+
+# Type check
+cd frontend && npx tsc --noEmit
+
+# Build
+cd frontend && npm run build
+```
+
+### Full Development
+
+```bash
+# Start both servers (two terminals)
+# Terminal 1: Backend
+uv run question-agent
+# Terminal 2: Frontend
+cd frontend && npm run dev
+```
+
+Frontend runs at `http://localhost:3000`, backend at `http://localhost:8000`.
+Frontend connects to backend via `NEXT_PUBLIC_API_URL` env var (default: `http://localhost:8000`).
+
 ## Code Style
 
+### Python
 - Line length: 100 (ruff). Python 3.12+.
 - ruff selects: E, F, I, N, W, UP. Import sorting configured with `known-first-party = ["question_agent"]`.
 - mypy runs in **strict mode** — every function and method must be fully type-annotated.
+
+### TypeScript / React
+- Indent: 2 spaces. Single quotes. Semicolons.
+- ESLint via eslint-config-next.
+- Components use named exports, not default exports (shadcn/ui convention).
 
 ## Testing
 
@@ -34,7 +82,6 @@ Always use `uv run <tool>` — ruff, mypy, and pytest are dev dependencies, not 
 
 ## Architecture
 
-- No `src/` layout — the package is at `question_agent/`.
-- Config via pydantic-settings in `question_agent/config.py`, reads `.env` for `GLM_API_KEY` and `GLM_MODEL`. See `.env.example`.
-- zai-sdk (GLM-5) is declared but not yet wired into application code.
+- Backend: No `src/` layout — the package is at `question_agent/`. Config via pydantic-settings in `question_agent/config.py`, reads `.env` for `GLM_API_KEY` and `GLM_MODEL`. See `.env.example`.
+- Frontend: App Router with `src/` layout. Pages in `frontend/src/app/`. Components in `frontend/src/components/`.
 - Structured pre-dev workflow lives in `.claude/skills/`. Specs and roadmaps in `docs/superpowers/`.

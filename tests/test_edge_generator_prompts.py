@@ -1,12 +1,8 @@
 """Edge case tests for questions/generator.py and questions/prompts.py modules."""
 
-import json
-from unittest.mock import MagicMock
-
 import pytest
 
 from question_agent.questions.generator import _KpInput, _make_failed_stem, generate_questions
-from question_agent.questions.llm import generate_question_llm
 from question_agent.questions.prompts import PROMPT_REGISTRY, select_prompt
 
 
@@ -67,10 +63,7 @@ class TestGenerateQuestionsEdgeCases:
         monkeypatch.setattr(
             "question_agent.questions.generator.generate_question_llm", lambda **kw: None
         )
-        kps = [
-            _KpInput(name=f"kp{i}", description=f"desc{i}", tags=[])
-            for i in range(3)
-        ]
+        kps = [_KpInput(name=f"kp{i}", description=f"desc{i}", tags=[]) for i in range(3)]
         questions, stats = await generate_questions(kps)
         assert stats.total == 3
         assert stats.failed == 3
@@ -124,9 +117,7 @@ class TestGenerateQuestionsEdgeCases:
                 question_type="definition",
             )
 
-        monkeypatch.setattr(
-            "question_agent.questions.generator.generate_question_llm", _mock_gen
-        )
+        monkeypatch.setattr("question_agent.questions.generator.generate_question_llm", _mock_gen)
         kps = [_KpInput(name=f"kp{i}", description="d", tags=[]) for i in range(4)]
         questions, stats = await generate_questions(kps)
         assert stats.total == 4

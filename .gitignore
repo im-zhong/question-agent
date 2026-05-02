@@ -5,6 +5,11 @@ __pycache__/
 .uv/
 uv.lock
 
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+frontend/.env.local
 
 harness/
 .omc/
