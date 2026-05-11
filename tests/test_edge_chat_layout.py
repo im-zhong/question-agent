@@ -78,15 +78,16 @@ class TestChatMessageRendering:
         content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
         assert "ReactMarkdown" in content, "Assistant messages should render markdown"
 
-    def test_has_mock_reply_logic(self) -> None:
+    def test_uses_websocket_for_messaging(self) -> None:
         content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
-        assert "MOCK_REPLIES" in content, "Should have mock reply data"
-        assert "setTimeout" in content, "Should delay mock reply"
+        assert "useWebSocket" in content, "Should use WebSocket hook for messaging"
+        assert "send" in content, "Should call send via WebSocket"
 
-    def test_has_typing_indicator(self) -> None:
+    def test_has_connection_status(self) -> None:
         content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
-        assert "isTyping" in content, "Should have typing indicator state"
-        assert "正在输入" in content, "Should show typing indicator text"
+        assert "ConnectionStatus" in content, "Should show connection status"
+        assert "已连接" in content, "Should have connected label"
+        assert "未连接" in content, "Should have disconnected label"
 
     def test_enter_sends_shift_enter_newline(self) -> None:
         content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
@@ -101,3 +102,23 @@ class TestChatMessageRendering:
     def test_react_markdown_installed(self) -> None:
         pkg = (FRONTEND_DIR / "package.json").read_text()
         assert "react-markdown" in pkg, "react-markdown should be in dependencies"
+
+    def test_websocket_hook_exists(self) -> None:
+        assert (FRONTEND_DIR / "src" / "hooks" / "use-websocket.ts").exists()
+
+    def test_websocket_hook_exports_status(self) -> None:
+        content = (FRONTEND_DIR / "src" / "hooks" / "use-websocket.ts").read_text()
+        assert "ConnectionStatus" in content, "Hook should export ConnectionStatus type"
+        assert "send" in content, "Hook should return send function"
+
+
+class TestWebSocketBackendEndpoint:
+    """Verify backend WebSocket endpoint exists and is properly defined."""
+
+    def test_ws_endpoint_in_main(self) -> None:
+        content = (Path(__file__).resolve().parent.parent / "question_agent" / "main.py").read_text()
+        assert "/ws/chat" in content, "Backend should have /ws/chat WebSocket endpoint"
+        assert "WebSocket" in content, "Should import WebSocket from FastAPI"
+        assert "websocket.accept" in content, "Should accept WebSocket connections"
+        assert "websocket.receive_json" in content, "Should receive JSON messages"
+        assert "websocket.send_json" in content, "Should send JSON messages"

@@ -3,7 +3,8 @@ import { useCallback, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
-import { SendHorizonal } from 'lucide-react';
+import { useWebSocket, type ConnectionStatus } from '@/hooks/use-websocket';
+import { SendHorizonal, Wifi, WifiOff, Loader2 } from 'lucide-react';
 
 export const Route = createFileRoute('/chat')({
   component: ChatPage,
@@ -15,39 +16,36 @@ interface ChatMessage {
   content: string;
 }
 
-const MOCK_REPLIES = [
-  '你好！我是智能出题助手。请上传教材文件，我会帮你提取知识点并生成题目。',
-  '好的，我来分析一下这份教材的知识点结构。',
-  '已提取 **3 个核心知识点**：\n\n1. 牛顿第二定律\n2. 加速度的定义\n3. 力的合成与分解\n\n需要我基于这些知识点生成题目吗？',
-  '已生成 **5 道选择题**，覆盖上述知识点。你可以查看并选择需要的题目。',
-
-  '```python\ndef hello():\n    print("Hello, World!")\n```\n\n这是一个代码示例。',
-];
-
 let nextId = 1;
+
+const WS_URL = `ws://localhost:8000/ws/chat`;
 
 function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleWebSocketMessage = useCallback((data: { type: string; content: string }) => {
+    if (data.type === 'message') {
+      const assistantMsg: ChatMessage = { id: nextId++, role: 'assistant', content: data.content };
+      setMessages((prev) => [...prev, assistantMsg]);
+    }
+  }, []);
+
+  const { status, send } = useWebSocket({
+    url: WS_URL,
+    onMessage: handleWebSocketMessage,
+  });
 
   const sendMessage = useCallback(() => {
     const text = input.trim();
-    if (!text || isTyping) return;
+    if (!text || status !== 'connected') return;
 
     const userMsg: ChatMessage = { id: nextId++, role: 'user', content: text };
     setMessages((prev) => [...prev, userMsg]);
+    send({ type: 'message', content: text });
     setInput('');
-    setIsTyping(true);
-
-    setTimeout(() => {
-      const reply = MOCK_REPLIES[Math.floor(Math.random() * MOCK_REPLIES.length)] ?? '好的，我了解了。';
-      const assistantMsg: ChatMessage = { id: nextId++, role: 'assistant', content: reply };
-      setMessages((prev) => [...prev, assistantMsg]);
-      setIsTyping(false);
-    }, 600);
-  }, [input, isTyping]);
+  }, [input, status, send]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -61,6 +59,12 @@ function ChatPage() {
 
   return (
     <div className="flex h-full flex-col">
+      {/* Connection status */}
+      <div className="flex items-center gap-1.5 border-b border-border px-4 py-1.5 text-xs text-muted-foreground">
+        <ConnectionIcon status={status} />
+        <span>{statusLabel(status)}</span>
+      </div>
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-4 py-6">
@@ -72,16 +76,6 @@ function ChatPage() {
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} />
           ))}
-          {isTyping && (
-            <div className="mb-4 flex gap-3">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
-                AI
-              </div>
-              <div className="rounded-2xl bg-muted px-4 py-2.5 text-sm text-muted-foreground">
-                <span className="inline-block animate-pulse">正在输入...</span>
-              </div>
-            </div>
-          )}
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -93,15 +87,20 @@ function ChatPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+            placeholder={
+              status === 'connected'
+                ? '输入消息... (Enter 发送, Shift+Enter 换行)'
+                : '等待连接...'
+            }
             aria-label="消息输入"
             rows={1}
-            className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            disabled={status !== 'connected'}
+            className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
           />
           <Button
             size="icon"
             onClick={sendMessage}
-            disabled={!input.trim() || isTyping}
+            disabled={!input.trim() || status !== 'connected'}
             aria-label="发送"
           >
             <SendHorizonal className="size-4" />
@@ -110,6 +109,18 @@ function ChatPage() {
       </div>
     </div>
   );
+}
+
+function ConnectionIcon({ status }: { status: ConnectionStatus }) {
+  if (status === 'connected') return <Wifi className="size-3 text-green-500" />;
+  if (status === 'connecting') return <Loader2 className="size-3 animate-spin text-yellow-500" />;
+  return <WifiOff className="size-3 text-red-500" />;
+}
+
+function statusLabel(status: ConnectionStatus): string {
+  if (status === 'connected') return '已连接';
+  if (status === 'connecting') return '连接中...';
+  return '未连接';
 }
 
 function MessageBubble({ message }: { message: ChatMessage }) {

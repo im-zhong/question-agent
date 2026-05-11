@@ -6,7 +6,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -230,6 +230,19 @@ async def health_check() -> JSONResponse:
             "version": __version__,
         }
     )
+
+
+@app.websocket("/ws/chat")
+async def ws_chat(websocket: WebSocket) -> None:
+    """WebSocket echo endpoint for chat prototyping."""
+    await websocket.accept()
+    try:
+        while True:
+            data = await websocket.receive_json()
+            content = data.get("content", "")
+            await websocket.send_json({"type": "message", "content": content})
+    except WebSocketDisconnect:
+        pass
 
 
 @app.post("/extract")
