@@ -61,3 +61,43 @@ class TestChatSidebarAccessibility:
     def test_chat_input_has_aria_label(self) -> None:
         content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
         assert 'aria-label="消息输入"' in content, "Chat input should have aria-label"
+
+    def test_send_button_has_aria_label(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert 'aria-label="发送"' in content, "Send button should have aria-label"
+
+
+class TestChatMessageRendering:
+    """Verify chat message components exist and use correct patterns."""
+
+    def test_uses_textarea_not_input(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "<textarea" in content, "Chat input should use textarea for multiline"
+
+    def test_has_markdown_rendering(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "ReactMarkdown" in content, "Assistant messages should render markdown"
+
+    def test_has_mock_reply_logic(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "MOCK_REPLIES" in content, "Should have mock reply data"
+        assert "setTimeout" in content, "Should delay mock reply"
+
+    def test_has_typing_indicator(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "isTyping" in content, "Should have typing indicator state"
+        assert "正在输入" in content, "Should show typing indicator text"
+
+    def test_enter_sends_shift_enter_newline(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "Shift" in content, "Should handle Shift+Enter for newline"
+        assert "Enter" in content, "Should handle Enter for send"
+
+    def test_message_roles(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "'user'" in content, "Should have user message role"
+        assert "'assistant'" in content, "Should have assistant message role"
+
+    def test_react_markdown_installed(self) -> None:
+        pkg = (FRONTEND_DIR / "package.json").read_text()
+        assert "react-markdown" in pkg, "react-markdown should be in dependencies"
