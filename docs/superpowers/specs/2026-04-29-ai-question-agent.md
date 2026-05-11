@@ -1,12 +1,12 @@
 # AI 智能出题智能体 — Spec
 
 **Created:** 2026-04-29
-**Last updated:** 2026-05-02
+**Last updated:** 2026-05-11
 **Status:** DRAFT
 
 ## Goal
 
-基于 GLM 系列大模型构建智能出题智能体，利用出版社已有教材内容（章节、例题、练习题设计原理），在无大规模样例题微调的条件下，生成学段契合、知识点匹配、干扰项合理的高质量客观题（选择题）和主观题。
+基于 GLM 系列大模型构建智能出题智能体，以对话为交互形态，利用出版社已有教材内容（章节、例题、练习题设计原理），在无大规模样例题微调的条件下，生成学段契合、知识点匹配、干扰项合理的高质量客观题（选择题）和主观题。
 
 ## Target Users
 
@@ -18,6 +18,7 @@
 - [ ] **可控出题** — 支持调节题目难度、语言风格（适配学段）、题型（选择题/主观题），按需生成题目
 - [ ] **干扰项逻辑建模** — 模拟学生常见错误思路（概念混淆、计算错误、推理偏差），基于常错点生成合理干扰项
 - [ ] **交互式出题面板** — Web 单页应用，支持文件上传触发全链路出题、知识点浏览与选择、题目预览与导出
+- [ ] **对话式交互** — ChatGPT 风格聊天界面，用户通过对话方式触发出题流程，流式响应
 - [ ] **解题负担控制** — 在学段合理范围内约束题目所需的计算量、推理步骤数和文本理解复杂度
 
 ## Non-Goals
@@ -43,15 +44,22 @@
 - 题目质量控制标准的可操作化 — 如何定义"好题目"，是否需建立人工评审闭环
 - 扫描版 PDF（无文本层）的内容提取方案 — 当前仅发 warning，OCR 能力缺失且 toolchain 未为此场景备选
 - 章节层级间隙处理策略 — 缺失中间层级时（如只有 level 1 和 level 3），应插入虚拟占位标题还是将下级合并到最近的上级？需产品决策
+- LangGraph 与现有出题管线如何编排 — 对话状态机如何调度文件上传、知识抽取、出题等子流程
+- 对话中何时触发出题 — 用户上传文件后自动触发？还是需要用户在对话中明确请求？
+- 是否需要多轮对话出题 — 用户能否在对话中逐步细化出题要求（调整难度、指定知识点等）
 
 ## Architecture
 
 ```mermaid
 graph TB
     subgraph Frontend[前端层]
-        UI[单页应用 — 文件上传/知识点选择/题目预览]
+        ChatUI[聊天界面 — 对话交互/文件上传/题目展示]
     end
-    subgraph API
+    subgraph ChatAPI[对话层]
+        ChatEndpoint[/chat — WebSocket 实时通信]
+        ChatState[LangGraph — 对话状态机]
+    end
+    subgraph API[出题 API]
         Health[/health]
         Extract[/extract]
         Structure[/structure]
@@ -75,9 +83,11 @@ graph TB
         QLLM[llm.py — GLM-5 生成]
         QGenMod[generator.py — 批量+失败隔离]
     end
-    UI --> QFile
-    UI --> Knowledge
-    UI --> QGen
+    ChatUI --> ChatEndpoint
+    ChatEndpoint --> ChatState
+    ChatState -.-> QFile
+    ChatState -.-> Knowledge
+    ChatState -.-> QGen
     PDF --> Extract
     DOCX --> Extract
     TXT --> Extract
@@ -98,11 +108,15 @@ graph TB
 ```mermaid
 graph TB
     Root[智能出题智能体]
+    Root --> Chat[对话交互]
     Root --> KE[教材知识抽取]
     Root --> QG[题目生成]
     Root --> QC[质量评估]
     Root --> OF[输出适配]
-    Root --> UI[交互面板]
+    Chat --> CM[对话管理]
+    Chat --> FU[文件上传出题]
+    Chat --> KP[知识点浏览选择]
+    Chat --> QP[题目预览导出]
     KE --> EP[知识点提取]
     KE --> BI[能力目标识别]
     KE --> CE[常错点挖掘]
@@ -114,7 +128,4 @@ graph TB
     QC --> CO[内容审查]
     OF --> RF[题目格式化]
     OF --> EX[批量导出]
-    UI --> FU[文件上传出题]
-    UI --> KP[知识点浏览选择]
-    UI --> QP[题目预览导出]
 ```

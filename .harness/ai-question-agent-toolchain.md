@@ -1,7 +1,7 @@
 # AI 智能出题智能体 — Toolchain
 
 **Created:** 2026-04-29
-**Last updated:** 2026-05-02
+**Last updated:** 2026-05-11
 **Status:** ACTIVE
 
 ## Phase 1 技术栈 (当前)
@@ -9,21 +9,23 @@
 | 技术 | 支撑功能 | 选型理由 |
 |------|---------|---------|
 | zai-sdk (GLM-5) | 知识点识别与标注、能力目标识别、常错点挖掘、基于知识点生成题干、正确答案生成、难度等级控制、干扰项逻辑建模（概念混淆/计算错误/推理偏差）、答案解析生成、知识点匹配度验证 | 核心引擎，GLM-5 中文理解能力强，原生 SDK 零额外适配 |
-| FastAPI + uvicorn | 所有出题、知识抽取、质量评估的 HTTP API 端点 | 异步支持好，自动生成 OpenAPI 文档便于联调，部署简单 |
+| FastAPI + uvicorn | 所有出题、知识抽取、质量评估的 HTTP API 端点 + WebSocket 聊天实时通信 | 异步支持好，原生 WebSocket 支持，自动生成 OpenAPI 文档便于联调，部署简单 |
 | Pydantic + pydantic-settings | 题目格式完整性检查、难度等级与解题负担参数校验、API 请求/响应建模、环境配置管理 | 类型安全校验，与 FastAPI 深度集成，配置热加载 |
 | SQLite (stdlib sqlite3) | 知识点层级关系存储、已生成题目缓存、评审结果收集、反馈数据持久化 | 零依赖、零运维、Phase 1 单机无并发需求 |
 | pdfplumber | PDF 教材文本提取、表格/列表结构保留 | 比 PyPDF2 对中文 PDF 的表格和列布局提取更稳定 |
 | python-docx | Word 教材段落/标题/表格文本提取 | 出版社教材多为 .docx 格式，直接读取段落样式辅助章节识别 |
 | Jinja2 | 题目格式化排版（题干/选项/答案模板）、多格式批量导出（Markdown/HTML/LaTeX） | 模板与逻辑分离，后续可灵活切换输出格式 |
 | stdlib logging | 全模块日志输出（知识点识别、题目生成、质量评估链路） | 零依赖，Python 默认选择，已有代码使用 getLogger |
-| Vite + React + TypeScript + TanStack Router | 交互面板 — 文件上传、知识点浏览选择、题目预览导出 | Vite 构建速度快、HMR 即时，TanStack Router 类型安全路由，纯 SPA 架构与 FastAPI 后端解耦 |
-| Tailwind CSS + shadcn/ui | 交互面板 UI 样式与组件 | 原子化 CSS + 可定制无样式组件库，快速搭建 MVP |
+| LangGraph | 对话状态机、智能体调度（对话中触发知识抽取/出题等子流程） | 有状态图编排，原生支持 async 流式输出、thread 隔离、checkpoint 持久化，与 FastAPI 集成简洁 |
+| Vite + React + TypeScript + TanStack Router | 聊天界面 — 对话交互、文件上传、知识点浏览选择、题目预览导出 | Vite 构建速度快、HMR 即时，TanStack Router 类型安全路由，纯 SPA 架构与 FastAPI 后端解耦 |
+| Tailwind CSS + shadcn/ui | 聊天界面 UI 样式与组件（含对话气泡、消息列表、输入框等对话组件） | 原子化 CSS + 可定制无样式组件库，ChatGPT 风格快速搭建 |
 
 ## Phase 2+ 候选方向
 
 | 阶段 | 候选技术 | 支撑功能 | 触发条件 |
 |------|---------|---------|---------|
 | Phase 2 | ChromaDB（嵌入式向量库） | 知识点相似检索、已出题目去重检测、常错点模式聚类 | SQLite 关键词匹配无法满足语义相似度检索时（嵌入式部署，零额外运维） |
+| Phase 2 | LangGraph SqliteSaver / PostgresSaver | 对话状态持久化（跨会话恢复、多设备同步） | MemorySaver（内存）无法满足跨重启恢复需求时 |
 | Phase 2 | GLM-5V（视觉模型） | 图像密集型教材页面的图文混排理解、公式/图表识别 | PDF 文本提取对公式、插图、表格混排页面失败率高时 |
 | Phase 3 | PostgreSQL + pgvector | 多用户并发下的知识点库和题目库管理、向量检索生产化 | 从单机演示转向多编辑协作场景时（前期优先使用嵌入式方案 SQLite + ChromaDB） |
 | Phase 3 | WeasyPrint / Pandoc | PDF/Word 原生的题目排版输出（字号、分栏、答题区留白） | 需要直接交付可印刷的题目文档时 |
@@ -40,6 +42,8 @@
 | Iter 4 总结: 正确答案生成 | 业界共识"先推理再生成答案"——CoT prompting + 独立验证调用可显著降低答案幻觉率。推荐两阶段管线：先生成题干+答案，再用独立 LLM 调用做反向验证 |
 | Iter 4 总结: 干扰项生成 SOTA | 两大方向：(1) 基于 misconception 生成干扰项——迷惑性最强；(2) 基于知识图谱语义邻近节点——结构化程度高。推荐：正确答案→错误类型标签→按类型独立生成干扰项 |
 | Iter 4 总结: 结构化输出 | JSON mode + 明确 schema + temperature 0.3 是当前最可靠的 LLM 结构化输出方案。先生成正确答案再生成干扰项可避免干扰项污染答案 |
+| LangGraph 官方文档 | StateGraph + MessagesState + add_messages reducer 管理对话历史；MemorySaver 内存级 checkpoint，thread_id 隔离会话；astream(stream_mode="messages") 实现 token 级流式输出；create_react_agent 内置 ReAct 循环 |
+| LangGraph + FastAPI 集成 | FastAPI WebSocket + compiled_graph.astream_events() 逐 token 推送；需用 version="v2"；stream_mode="messages" 适合聊天场景；thread_id 在 config 中传递 |
 
 ## 风险 & 备选
 
@@ -49,6 +53,7 @@
 - **风险:** 扫描版 PDF（无文本层）pdfplumber 无法提取内容，当前仅发 warning —— 出版社纸质教材扫描件是常见输入格式 → **备选:** 短期在 `/extract` 响应中明确标注 `extractable: false` 便于调用方处理；Phase 2 评估 GLM-5V 视觉模型直接理解扫描页的可行性，或集成 PaddleOCR/Tesseract 做预处理
 - **风险:** pdfplumber `page.chars` 字符级解析在大文档（500+段）下内存开销约为文本模式的 2 倍，可能触发内存压力 → **备选:** 分页批处理 + 流式返回，或对大文档降级为行级解析而非字符级
 - **风险:** Vite proxy 仅开发环境生效 — 生产环境需配置 nginx 等反向代理将 /api 请求转发到 FastAPI 后端 → **备选:** 部署时使用 nginx 反向代理，或将前端静态文件挂载到 FastAPI 的 static 目录下同源提供服务
+- **风险:** LangGraph 学习曲线 — 状态图、checkpoint、条件边等概念需团队熟悉，且与现有出题管线（直接函数调用模式）的集成模式未验证 → **备选:** Phase 1 先用简单 StateGraph（单节点 chatbot + tool 调度），逐步引入复杂编排；若集成困难，降级为纯 FastAPI WebSocket + 手写状态管理
 
 ---
 
@@ -66,6 +71,7 @@
 | fastapi | Web framework | (via pytest + mypy) | 0.136.x |
 | uvicorn | ASGI server | (runtime) | 0.46.x |
 | zai-sdk | GLM-5 SDK | (runtime) | 0.2.x |
+| langgraph | 对话状态机 | (via pytest + mypy) | 0.4.x |
 
 ## All Checks
 
