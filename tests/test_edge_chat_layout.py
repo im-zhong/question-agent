@@ -89,6 +89,25 @@ class TestChatMessageRendering:
         assert "已连接" in content, "Should have connected label"
         assert "未连接" in content, "Should have disconnected label"
 
+    def test_has_reconnect_button(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "重新连接" in content, "Should have reconnect button"
+        assert "RefreshCw" in content, "Should use RefreshCw icon for reconnect"
+
+    def test_empty_state_centered(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "flex-col items-center justify-center" in content, "Empty state should be centered"
+
+    def test_input_has_rounded_container(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "rounded-xl" in content, "Input container should have rounded corners"
+        assert "shadow-sm" in content, "Input container should have subtle shadow"
+
+    def test_sidebar_dark_theme(self) -> None:
+        content = (FRONTEND_DIR / "src" / "components" / "chat-sidebar.tsx").read_text()
+        assert "bg-zinc-900" in content, "Sidebar should use dark background"
+        assert "zinc" in content, "Sidebar should use zinc color palette"
+
     def test_enter_sends_shift_enter_newline(self) -> None:
         content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
         assert "Shift" in content, "Should handle Shift+Enter for newline"

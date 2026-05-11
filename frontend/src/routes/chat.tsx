@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useWebSocket, type ConnectionStatus } from '@/hooks/use-websocket';
 import { useChat, createMessageId } from '@/lib/chat-context';
 import type { ChatMessage } from '@/lib/chat-context';
-import { SendHorizonal, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { SendHorizonal, Wifi, WifiOff, Loader2, RefreshCw } from 'lucide-react';
 
 export const Route = createFileRoute('/chat')({
   component: ChatPage,
@@ -53,7 +53,7 @@ function ChatPage() {
     [activeId, addMessage, appendToMessage, setStreamingMessageId],
   );
 
-  const { status, send } = useWebSocket({
+  const { status, send, connect } = useWebSocket({
     url: WS_URL,
     onMessage: handleWebSocketMessage,
   });
@@ -87,14 +87,21 @@ function ChatPage() {
       <div className="flex items-center gap-1.5 border-b border-border px-4 py-1.5 text-xs text-muted-foreground">
         <ConnectionIcon status={status} />
         <span>{statusLabel(status)}</span>
+        {status === 'disconnected' && (
+          <Button variant="ghost" size="sm" className="ml-auto h-6 gap-1 text-xs" onClick={connect}>
+            <RefreshCw className="size-3" />
+            重新连接
+          </Button>
+        )}
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-4 py-6">
           {messages.length === 0 && (
-            <div className="flex justify-center py-12 text-sm text-muted-foreground">
-              上传教材或输入问题开始对话
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+              <div className="mb-3 text-2xl">💬</div>
+              <p className="text-sm">上传教材或输入问题开始对话</p>
             </div>
           )}
           {messages.map((msg) => (
@@ -105,8 +112,8 @@ function ChatPage() {
       </div>
 
       {/* Input */}
-      <div className="border-t border-border px-4 py-3">
-        <div className="mx-auto flex max-w-3xl items-end gap-2">
+      <div className="border-t border-border bg-background px-4 py-3">
+        <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-xl border border-input bg-background px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-ring">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -119,13 +126,14 @@ function ChatPage() {
             aria-label="消息输入"
             rows={1}
             disabled={status !== 'connected'}
-            className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            className="max-h-32 min-h-[2.5rem] flex-1 resize-none bg-transparent text-sm placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
           />
           <Button
             size="icon"
             onClick={sendMessage}
             disabled={!input.trim() || status !== 'connected'}
             aria-label="发送"
+            className="size-8 shrink-0 rounded-lg"
           >
             <SendHorizonal className="size-4" />
           </Button>
