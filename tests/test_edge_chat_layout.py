@@ -116,7 +116,9 @@ class TestWebSocketBackendEndpoint:
     """Verify backend WebSocket endpoint exists and is properly defined."""
 
     def test_ws_endpoint_in_main(self) -> None:
-        content = (Path(__file__).resolve().parent.parent / "question_agent" / "main.py").read_text()
+        content = (
+            Path(__file__).resolve().parent.parent / "question_agent" / "main.py"
+        ).read_text()
         assert "/ws/chat" in content, "Backend should have /ws/chat WebSocket endpoint"
         assert "WebSocket" in content, "Should import WebSocket from FastAPI"
         assert "websocket.accept" in content, "Should accept WebSocket connections"

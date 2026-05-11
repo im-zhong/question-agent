@@ -1,25 +1,16 @@
 import { Button } from '@/components/ui/button';
+import { type Conversation } from '@/lib/chat-context';
 import { MessageSquare, Plus } from 'lucide-react';
-
-interface Conversation {
-  id: string;
-  title: string;
-  active?: boolean;
-}
-
-const MOCK_CONVERSATIONS: Conversation[] = [
-  { id: '1', title: '数学教材出题', active: true },
-  { id: '2', title: '语文知识点提取' },
-  { id: '3', title: '物理公式分析' },
-];
 
 interface ChatSidebarProps {
   collapsed: boolean;
+  conversations: Conversation[];
+  activeId: string | null;
   onNewChat: () => void;
   onSelectConversation: (id: string) => void;
 }
 
-export function ChatSidebar({ collapsed, onNewChat, onSelectConversation }: ChatSidebarProps) {
+export function ChatSidebar({ collapsed, conversations, activeId, onNewChat, onSelectConversation }: ChatSidebarProps) {
   if (collapsed) return null;
 
   return (
@@ -31,13 +22,13 @@ export function ChatSidebar({ collapsed, onNewChat, onSelectConversation }: Chat
         </Button>
       </div>
       <nav className="flex-1 overflow-y-auto px-2 pb-2">
-        {MOCK_CONVERSATIONS.map((conv) => (
+        {conversations.map((conv) => (
           <button
             key={conv.id}
             onClick={() => onSelectConversation(conv.id)}
-            aria-current={conv.active ? 'true' : undefined}
+            aria-current={conv.id === activeId ? 'true' : undefined}
             className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-              conv.active
+              conv.id === activeId
                 ? 'bg-accent text-accent-foreground'
                 : 'text-muted-foreground hover:bg-accent/50'
             }`}

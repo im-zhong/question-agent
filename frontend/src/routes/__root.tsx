@@ -1,6 +1,7 @@
 import { createRootRoute, Outlet } from '@tanstack/react-router';
 import { useState } from 'react';
 import { ChatSidebar } from '@/components/chat-sidebar';
+import { ChatProvider, useChat } from '@/lib/chat-context';
 import { Button } from '@/components/ui/button';
 import { PanelLeft, PanelLeftClose } from 'lucide-react';
 
@@ -9,14 +10,25 @@ export const Route = createRootRoute({
 });
 
 function RootLayout() {
+  return (
+    <ChatProvider>
+      <RootLayoutInner />
+    </ChatProvider>
+  );
+}
+
+function RootLayoutInner() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const { conversations, activeId, createConversation, selectConversation } = useChat();
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <ChatSidebar
         collapsed={sidebarCollapsed}
-        onNewChat={() => {}}
-        onSelectConversation={() => {}}
+        conversations={conversations}
+        activeId={activeId}
+        onNewChat={createConversation}
+        onSelectConversation={selectConversation}
       />
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">

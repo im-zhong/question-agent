@@ -4,33 +4,30 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
 import { useWebSocket, type ConnectionStatus } from '@/hooks/use-websocket';
+import { useChat, createMessageId } from '@/lib/chat-context';
+import type { ChatMessage } from '@/lib/chat-context';
 import { SendHorizonal, Wifi, WifiOff, Loader2 } from 'lucide-react';
 
 export const Route = createFileRoute('/chat')({
   component: ChatPage,
 });
 
-interface ChatMessage {
-  id: number;
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-let nextId = 1;
-
 const WS_URL = `ws://localhost:8000/ws/chat`;
 
 function ChatPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { activeConversation, activeId, addMessage, createConversation } = useChat();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleWebSocketMessage = useCallback((data: { type: string; content: string }) => {
-    if (data.type === 'message') {
-      const assistantMsg: ChatMessage = { id: nextId++, role: 'assistant', content: data.content };
-      setMessages((prev) => [...prev, assistantMsg]);
-    }
-  }, []);
+  const handleWebSocketMessage = useCallback(
+    (data: { type: string; content: string }) => {
+      if (data.type === 'message' && activeId) {
+        const assistantMsg: ChatMessage = { id: createMessageId(), role: 'assistant', content: data.content };
+        addMessage(activeId, assistantMsg);
+      }
+    },
+    [activeId, addMessage],
+  );
 
   const { status, send } = useWebSocket({
     url: WS_URL,
@@ -41,11 +38,13 @@ function ChatPage() {
     const text = input.trim();
     if (!text || status !== 'connected') return;
 
-    const userMsg: ChatMessage = { id: nextId++, role: 'user', content: text };
-    setMessages((prev) => [...prev, userMsg]);
+    // Create conversation if none active
+    const convId = activeId ?? createConversation();
+    const userMsg: ChatMessage = { id: createMessageId(), role: 'user', content: text };
+    addMessage(convId, userMsg);
     send({ type: 'message', content: text });
     setInput('');
-  }, [input, status, send]);
+  }, [input, status, activeId, createConversation, addMessage, send]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -56,6 +55,8 @@ function ChatPage() {
     },
     [sendMessage],
   );
+
+  const messages = activeConversation?.messages ?? [];
 
   return (
     <div className="flex h-full flex-col">
