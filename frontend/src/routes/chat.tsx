@@ -12,7 +12,7 @@ export const Route = createFileRoute('/chat')({
   component: ChatPage,
 });
 
-const WS_URL = `ws://localhost:8000/ws/chat`;
+const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/chat`;
 
 function ChatPage() {
   const {
