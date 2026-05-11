@@ -124,3 +124,30 @@ class TestWebSocketBackendEndpoint:
         assert "websocket.accept" in content, "Should accept WebSocket connections"
         assert "websocket.receive_json" in content, "Should receive JSON messages"
         assert "websocket.send_json" in content, "Should send JSON messages"
+
+    def test_backend_sends_start_token_end(self) -> None:
+        content = (
+            Path(__file__).resolve().parent.parent / "question_agent" / "main.py"
+        ).read_text()
+        assert '"start"' in content, "Should send start event"
+        assert '"token"' in content, "Should send token events"
+        assert '"end"' in content, "Should send end event"
+        assert "asyncio.sleep" in content, "Should have delay between tokens"
+
+    def test_frontend_handles_start_token_end(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "'start'" in content, "Should handle start event"
+        assert "'token'" in content, "Should handle token event"
+        assert "'end'" in content, "Should handle end event"
+
+    def test_chat_context_has_append_to_message(self) -> None:
+        content = (FRONTEND_DIR / "src" / "lib" / "chat-context.tsx").read_text()
+        assert "appendToMessage" in content, "Should have appendToMessage for streaming"
+
+    def test_typing_indicator_shown(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "正在输入" in content, "Should show typing indicator"
+
+    def test_auto_scroll_on_messages(self) -> None:
+        content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
+        assert "scrollIntoView" in content, "Should auto-scroll to bottom"

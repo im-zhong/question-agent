@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
@@ -15,18 +15,42 @@ export const Route = createFileRoute('/chat')({
 const WS_URL = `ws://localhost:8000/ws/chat`;
 
 function ChatPage() {
-  const { activeConversation, activeId, addMessage, createConversation } = useChat();
+  const {
+    activeConversation,
+    activeId,
+    addMessage,
+    appendToMessage,
+    createConversation,
+    streamingMessageId,
+    setStreamingMessageId,
+  } = useChat();
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const streamingMsgIdRef = useRef<number | null>(null);
+
+  // Auto-scroll on new content
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [activeConversation?.messages, streamingMessageId]);
 
   const handleWebSocketMessage = useCallback(
-    (data: { type: string; content: string }) => {
-      if (data.type === 'message' && activeId) {
-        const assistantMsg: ChatMessage = { id: createMessageId(), role: 'assistant', content: data.content };
-        addMessage(activeId, assistantMsg);
+    (data: { type: string; content?: string }) => {
+      if (!activeId) return;
+
+      if (data.type === 'start') {
+        const id = createMessageId();
+        streamingMsgIdRef.current = id;
+        setStreamingMessageId(id);
+        const msg: ChatMessage = { id, role: 'assistant', content: '' };
+        addMessage(activeId, msg);
+      } else if (data.type === 'token' && streamingMsgIdRef.current !== null && data.content) {
+        appendToMessage(activeId, streamingMsgIdRef.current, data.content);
+      } else if (data.type === 'end') {
+        streamingMsgIdRef.current = null;
+        setStreamingMessageId(null);
       }
     },
-    [activeId, addMessage],
+    [activeId, addMessage, appendToMessage, setStreamingMessageId],
   );
 
   const { status, send } = useWebSocket({
@@ -38,7 +62,6 @@ function ChatPage() {
     const text = input.trim();
     if (!text || status !== 'connected') return;
 
-    // Create conversation if none active
     const convId = activeId ?? createConversation();
     const userMsg: ChatMessage = { id: createMessageId(), role: 'user', content: text };
     addMessage(convId, userMsg);
@@ -75,7 +98,7 @@ function ChatPage() {
             </div>
           )}
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
+            <MessageBubble key={msg.id} message={msg} isStreaming={msg.id === streamingMessageId} />
           ))}
           <div ref={messagesEndRef} />
         </div>
@@ -124,7 +147,7 @@ function statusLabel(status: ConnectionStatus): string {
   return '未连接';
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({ message, isStreaming }: { message: ChatMessage; isStreaming: boolean }) {
   const isUser = message.role === 'user';
 
   return (
@@ -147,10 +170,13 @@ function MessageBubble({ message }: { message: ChatMessage }) {
       >
         {isUser ? (
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        ) : (
+        ) : message.content ? (
           <div className="prose prose-sm max-w-none break-words dark:prose-invert [&_pre]:rounded-md [&_pre]:bg-background [&_pre]:p-3 [&_code]:text-xs">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+            {isStreaming && <span className="inline-block w-0.5 animate-pulse bg-foreground" />}
           </div>
+        ) : (
+          <span className="inline-block animate-pulse text-muted-foreground">正在输入...</span>
         )}
       </div>
     </div>

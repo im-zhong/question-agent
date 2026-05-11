@@ -16,9 +16,12 @@ interface ChatState {
   conversations: Conversation[];
   activeId: string | null;
   activeConversation: Conversation | null;
+  streamingMessageId: number | null;
   createConversation: () => string;
   selectConversation: (id: string) => void;
   addMessage: (conversationId: string, message: ChatMessage) => void;
+  appendToMessage: (conversationId: string, messageId: number, token: string) => void;
+  setStreamingMessageId: (id: number | null) => void;
 }
 
 const ChatContext = createContext<ChatState | null>(null);
@@ -29,6 +32,7 @@ let nextConvId = 1;
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null);
 
   const createConversation = useCallback(() => {
     const id = String(nextConvId++);
@@ -56,11 +60,38 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const appendToMessage = useCallback(
+    (conversationId: string, messageId: number, token: string) => {
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== conversationId) return c;
+          return {
+            ...c,
+            messages: c.messages.map((m) =>
+              m.id === messageId ? { ...m, content: m.content + token } : m,
+            ),
+          };
+        }),
+      );
+    },
+    [],
+  );
+
   const activeConversation = conversations.find((c) => c.id === activeId) ?? null;
 
   return (
     <ChatContext.Provider
-      value={{ conversations, activeId, activeConversation, createConversation, selectConversation, addMessage }}
+      value={{
+        conversations,
+        activeId,
+        activeConversation,
+        streamingMessageId,
+        createConversation,
+        selectConversation,
+        addMessage,
+        appendToMessage,
+        setStreamingMessageId,
+      }}
     >
       {children}
     </ChatContext.Provider>

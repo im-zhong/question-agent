@@ -234,13 +234,19 @@ async def health_check() -> JSONResponse:
 
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket) -> None:
-    """WebSocket echo endpoint for chat prototyping."""
+    """WebSocket streaming echo endpoint for chat prototyping."""
+    import asyncio
+
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_json()
             content = data.get("content", "")
-            await websocket.send_json({"type": "message", "content": content})
+            await websocket.send_json({"type": "start"})
+            for char in content:
+                await websocket.send_json({"type": "token", "content": char})
+                await asyncio.sleep(0.03)
+            await websocket.send_json({"type": "end"})
     except WebSocketDisconnect:
         pass
 
