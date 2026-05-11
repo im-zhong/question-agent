@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 question-agent-v1/
 ├── question_agent/    # Python backend (FastAPI)
-├── frontend/          # Next.js frontend (React + TypeScript + Tailwind + shadcn/ui)
+├── frontend/          # Vite + TanStack Router (React + TypeScript + Tailwind + shadcn/ui)
 ├── tests/             # Python tests
 ├── docs/              # Pre-dev documentation
 └── .harness/          # Toolchain config
@@ -33,20 +33,20 @@ uv run pytest --ignore=tests/integration/ -v
 
 Always use `uv run <tool>` — ruff, mypy, and pytest are dev dependencies, not globally installed.
 
-### Frontend (Next.js)
+### Frontend (Vite + TanStack Router)
 
 ```bash
 # Dev server (from frontend/ directory)
 cd frontend && npm run dev
 
-# Lint
-cd frontend && npm run lint
-
 # Type check
-cd frontend && npx tsc --noEmit
+cd frontend && npx tsc -b
 
 # Build
 cd frontend && npm run build
+
+# Preview production build
+cd frontend && npm run preview
 ```
 
 ### Full Development
@@ -59,8 +59,9 @@ uv run question-agent
 cd frontend && npm run dev
 ```
 
-Frontend runs at `http://localhost:3000`, backend at `http://localhost:8000`.
-Frontend connects to backend via `NEXT_PUBLIC_API_URL` env var (default: `http://localhost:8000`).
+Frontend runs at `http://localhost:5173` (Vite default), backend at `http://localhost:8000`.
+Frontend connects to backend via Vite dev proxy (`/api` → `http://localhost:8000`).
+Production: set `VITE_API_URL` env var for build-time API URL configuration.
 
 ## Code Style
 
@@ -71,8 +72,9 @@ Frontend connects to backend via `NEXT_PUBLIC_API_URL` env var (default: `http:/
 
 ### TypeScript / React
 - Indent: 2 spaces. Single quotes. Semicolons.
-- ESLint via eslint-config-next.
 - Components use named exports, not default exports (shadcn/ui convention).
+- Routing: TanStack Router file-based routing. Routes in `frontend/src/routes/`.
+- Auto-generated route tree at `frontend/src/routeTree.gen.ts` — do not edit manually.
 
 ## Testing
 
@@ -83,5 +85,5 @@ Frontend connects to backend via `NEXT_PUBLIC_API_URL` env var (default: `http:/
 ## Architecture
 
 - Backend: No `src/` layout — the package is at `question_agent/`. Config via pydantic-settings in `question_agent/config.py`, reads `.env` for `GLM_API_KEY` and `GLM_MODEL`. See `.env.example`.
-- Frontend: App Router with `src/` layout. Pages in `frontend/src/app/`. Components in `frontend/src/components/`.
+- Frontend: Vite SPA with `src/` layout. Routes in `frontend/src/routes/`. Components in `frontend/src/components/`.
 - Structured pre-dev workflow lives in `.claude/skills/`. Specs and roadmaps in `docs/superpowers/`.

@@ -1,6 +1,6 @@
 ---
 name: progressive-plan
-description: Break a roadmap functional point into 5-7 executable function items — MVP/prototype-driven vertical slices, lifecycle tags, feedback checkpoints, system always runnable
+description: Break a roadmap functional point into 5-7 executable function items — MVP-priority selection across branches, prototype-driven vertical slices, lifecycle tags, feedback checkpoints, system always runnable
 argument-hint: "[functional point name | 'done' | empty to auto-find next]"
 triggers:
   - "progressive plan"
@@ -13,12 +13,16 @@ level: 4
   Each item is a Minimum Usable Increment — small enough for ~100-200 lines of code, large enough
   to be independently verifiable. The system stays runnable after every single item.
 
-  MVP/prototype-driven: when a functional point spans multiple layers, prioritize vertical slices
-  that demonstrate end-to-end effects early. Use simplified/hardcoded logic to punch through layers,
-  get feedback, then refine. Don't wait for a full layer to complete before starting the next.
+  MVP/prototype-driven at TWO levels:
+  1. **Which functional point to pick next** — prioritize the leaf that, combined with completed work,
+     creates the most demo-able end-to-end experience. Don't complete an entire branch before
+     touching the next; punch across branches for early value.
+  2. **How to break it down** — when a functional point spans multiple layers, prioritize vertical slices
+     that demonstrate end-to-end effects early. Use simplified/hardcoded logic to punch through layers,
+     get feedback, then refine.
 
   This is the bridge between "what to build" (pre-dev spec/roadmap) and "how to build it step by step"
-  (team-lead execution). Progressive disclosure: only one functional point at a time.
+  (dev-loop execution). Progressive disclosure: only one functional point at a time.
 </Purpose>
 
 <Use_When>
@@ -31,7 +35,7 @@ level: 4
 <Do_Not_Use_When>
   - No pre-dev outputs exist — run /pre-dev first
   - User wants the full project plan at once — redirect to spec/roadmap documents
-  - User wants to execute code — use team-lead after progressive-plan
+  - User wants to execute code — use dev-loop after progressive-plan
   - Single bug fix or trivial change — skip planning
 </Do_Not_Use_When>
 
@@ -74,19 +78,32 @@ Note: what already exists, what's been completed, what items have been broken do
 
 ### Step 4: Find Next Available Functional Point (Auto-find Mode)
 
-Scan the roadmap tree. The next available point is the first leaf node that:
-1. Has status `[ ]` (not started, not in progress, not completed)
-2. All its dependencies (parent/prior siblings) are `[x]` or don't block it
-3. Does NOT already have a link to an items/ document (not already broken down)
+Scan the roadmap tree for ALL available leaf nodes — those that:
+1. Have status `[ ]` (not started, not in progress, not completed)
+2. Have all prerequisite leaf nodes within the same parent already `[x]` completed
+3. Do NOT already have a link to an items/ document (not already broken down)
 
-Priority: depth-first, top-to-bottom in the tree.
+Among candidates, apply **MVP priority** scoring (not tree order):
 
-If multiple candidates, pick the first. Present to user:
+| 优先级 | 维度 | 说明 |
+|--------|------|------|
+| 1 (最高) | 端到端可演示性 | 该 leaf 能否与已完成的工作组成端到端用户可感知的 demo？跨越分支的 leaf 优先（如"题目生成"比同分支的"知识点层级"更有演示价值） |
+| 2 | 用户可见输出 | 该 leaf 是否直接产生目标用户可看到/评估的输出？ |
+| 3 | 已有工作可复用 | 已完成的 leaf 越能支撑该 leaf，分越高（如"题目生成"可复用已完成的"知识点识别"） |
+| 4 (tiebreaker) | 树序 | 同分时按 depth-first, top-to-bottom 排列 |
+
+Present **top 2-3 candidates** to the user with MVP reasoning:
 ```
-**建议下一步:** 「单题录入」(Phase 1, 无前置依赖)
-  拆这个功能点？
+**候选功能点:**
+
+1. 🎯 「基于知识点生成题干」(题目生成/基础出题)
+   → MVP 优先: 已有知识点标注，可端到端 demo "教材→知识点→题目"
+2. 「知识点层级关系构建」(教材知识抽取/知识点层级提取)
+   → 树序优先: 同分支下一个 leaf
+
+建议拆哪个？
 ```
-Use AskUserQuestion with options derived from the roadmap candidates.
+Use AskUserQuestion with options derived from the ranked candidates.
 
 ### Step 5: Confirm Target Functional Point
 
@@ -287,14 +304,14 @@ Present a compact summary:
 
 📁 docs/superpowers/items/YYYY-MM-DD-<name>.md
 
-→ "确认？开始 team-lead 执行？" / "哪个功能项要改？"
+→ "确认？开始 dev-loop 执行？" / "哪个功能项要改？"
 ```
 
 Never dump the full document. The user can read the file.
 
 ### Step 11: Handle Gate
 
-- Confirm → done. Suggest: "Ready for team-lead. Run /team-lead with this items doc."
+- Confirm → done. Suggest: "Ready for dev-loop. Run /dev-loop with this items doc."
 - Change F-N → re-generate with specific feedback
 - Skip → leave DRAFT status
 
@@ -315,11 +332,11 @@ Never dump the full document. The user can read the file.
 </Progressive_Principle>
 
 <Gate_Behavior>
-  Show function item list as gate summary. User confirms before team-lead execution.
+  Show function item list as gate summary. User confirms before dev-loop execution.
 </Gate_Behavior>
 
 <Escalation>
   - If generation fails validation 3 times on same point, present the roadblock and ask user for direct breakdown
-  - If user says "just tell me what to build", redirect to team-lead with the items doc
+  - If user says "just tell me what to build", redirect to dev-loop with the items doc
   - If no functional points left to break down, celebrate and suggest /pre-dev for next cycle
 </Escalation>

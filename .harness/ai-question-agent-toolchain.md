@@ -16,7 +16,7 @@
 | python-docx | Word 教材段落/标题/表格文本提取 | 出版社教材多为 .docx 格式，直接读取段落样式辅助章节识别 |
 | Jinja2 | 题目格式化排版（题干/选项/答案模板）、多格式批量导出（Markdown/HTML/LaTeX） | 模板与逻辑分离，后续可灵活切换输出格式 |
 | stdlib logging | 全模块日志输出（知识点识别、题目生成、质量评估链路） | 零依赖，Python 默认选择，已有代码使用 getLogger |
-| Next.js + React + TypeScript | 交互面板 — 文件上传、知识点浏览选择、题目预览导出 | React 全栈框架，App Router 支持灵活路由，TypeScript 类型安全与后端 Pydantic 模型对应 |
+| Vite + React + TypeScript + TanStack Router | 交互面板 — 文件上传、知识点浏览选择、题目预览导出 | Vite 构建速度快、HMR 即时，TanStack Router 类型安全路由，纯 SPA 架构与 FastAPI 后端解耦 |
 | Tailwind CSS + shadcn/ui | 交互面板 UI 样式与组件 | 原子化 CSS + 可定制无样式组件库，快速搭建 MVP |
 
 ## Phase 2+ 候选方向
@@ -48,7 +48,7 @@
 - **风险:** GLM-5 API 调用延迟和费用随教材体量线性增长——一份教材可能上百页、数千个知识点候选 → **备选:** 知识点抽取阶段做分块批处理（每章一个 API 请求），本地缓存已抽取结果避免重复调用；开发期优先使用 GLM-5-Flash 免费额度
 - **风险:** 扫描版 PDF（无文本层）pdfplumber 无法提取内容，当前仅发 warning —— 出版社纸质教材扫描件是常见输入格式 → **备选:** 短期在 `/extract` 响应中明确标注 `extractable: false` 便于调用方处理；Phase 2 评估 GLM-5V 视觉模型直接理解扫描页的可行性，或集成 PaddleOCR/Tesseract 做预处理
 - **风险:** pdfplumber `page.chars` 字符级解析在大文档（500+段）下内存开销约为文本模式的 2 倍，可能触发内存压力 → **备选:** 分页批处理 + 流式返回，或对大文档降级为行级解析而非字符级
-- **风险:** Next.js 前端部署方式待定 — 静态导出（next export）无法使用 API Routes，Node 服务器模式增加运维复杂度 → **备选:** MVP 阶段使用 `next dev` 开发模式 + 生产环境 `next start`，前端直接调用 FastAPI 后端，不依赖 Next.js API Routes
+- **风险:** Vite proxy 仅开发环境生效 — 生产环境需配置 nginx 等反向代理将 /api 请求转发到 FastAPI 后端 → **备选:** 部署时使用 nginx 反向代理，或将前端静态文件挂载到 FastAPI 的 static 目录下同源提供服务
 
 ---
 
@@ -77,7 +77,9 @@ uv run ruff check . && uv run ruff format --check . && uv run mypy question_agen
 
 | 配置项 | 值 |
 |--------|-----|
-| Start Command | `uv run question-agent` |
+| Backend Start | `uv run question-agent` |
+| Frontend Start | `cd frontend && npm run dev` |
 | Health Check | `GET /docs` → 200 |
 | Shutdown Signal | SIGTERM |
-| Port | 8000 |
+| Backend Port | 8000 |
+| Frontend Port | 5173 (Vite default) |

@@ -1,20 +1,19 @@
-"use client";
+import { createFileRoute } from '@tanstack/react-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+const API_URL = '/api';
 
-const API_URL = "/api";
-
-const ACCEPTED_EXTENSIONS = [".pdf", ".docx", ".txt"];
+const ACCEPTED_EXTENSIONS = ['.pdf', '.docx', '.txt'];
 const ACCEPTED_MIME_TYPES = [
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "text/plain",
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
 ];
 
-type HealthStatus = "checking" | "connected" | "disconnected";
+type HealthStatus = 'checking' | 'connected' | 'disconnected';
 
 interface QuestionOption {
   label: string;
@@ -67,46 +66,42 @@ function formatFileSize(bytes: number): string {
 }
 
 function isAcceptedFile(file: File): boolean {
-  const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+  const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
   return ACCEPTED_EXTENSIONS.includes(ext) || ACCEPTED_MIME_TYPES.includes(file.type);
 }
 
-export default function Home() {
-  const [healthStatus, setHealthStatus] = useState<HealthStatus>("checking");
+export const Route = createFileRoute('/')({
+  component: HomePage,
+});
+
+function HomePage() {
+  const [healthStatus, setHealthStatus] = useState<HealthStatus>('checking');
 
   useEffect(() => {
     fetch(`${API_URL}/health`)
-      .then((res) => (res.ok ? setHealthStatus("connected") : setHealthStatus("disconnected")))
-      .catch(() => setHealthStatus("disconnected"));
+      .then((res) => (res.ok ? setHealthStatus('connected') : setHealthStatus('disconnected')))
+      .catch(() => setHealthStatus('disconnected'));
   }, []);
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-4 py-4 sm:px-6">
-        <div className="mx-auto flex max-w-4xl items-center justify-between">
-          <h1 className="text-xl font-semibold tracking-tight">智能出题</h1>
-          <HealthIndicator status={healthStatus} />
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
-        <FileUpload healthStatus={healthStatus} />
-      </main>
-    </div>
+    <>
+      <HealthIndicator status={healthStatus} />
+      <FileUpload healthStatus={healthStatus} />
+    </>
   );
 }
 
 function HealthIndicator({ status }: { status: HealthStatus }) {
   const config: Record<HealthStatus, { label: string; dot: string }> = {
-    checking: { label: "连接中...", dot: "bg-yellow-500" },
-    connected: { label: "后端已连接", dot: "bg-green-500" },
-    disconnected: { label: "后端未连接", dot: "bg-red-500" },
+    checking: { label: '连接中...', dot: 'bg-yellow-500' },
+    connected: { label: '后端已连接', dot: 'bg-green-500' },
+    disconnected: { label: '后端未连接', dot: 'bg-red-500' },
   };
 
   const { label, dot } = config[status];
 
   return (
-    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+    <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
       <span className={`inline-block size-2 rounded-full ${dot}`} />
       <span>{label}</span>
     </div>
@@ -128,7 +123,7 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
     setResult(null);
     if (!isAcceptedFile(file)) {
       setSelectedFile(null);
-      setError("不支持的文件格式，请选择 PDF、Word 或纯文本文件");
+      setError('不支持的文件格式，请选择 PDF、Word 或纯文本文件');
       return;
     }
     setSelectedFile(file);
@@ -167,13 +162,13 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
     setError(null);
     setApiError(null);
     setResult(null);
-    if (inputRef.current) inputRef.current.value = "";
+    if (inputRef.current) inputRef.current.value = '';
   }, []);
 
   const handleGenerate = useCallback(async () => {
     if (!selectedFile) return;
-    if (healthStatus === "disconnected") {
-      setApiError("无法连接后端服务，请确认后端已启动");
+    if (healthStatus === 'disconnected') {
+      setApiError('无法连接后端服务，请确认后端已启动');
       return;
     }
     setIsLoading(true);
@@ -182,13 +177,13 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
 
     try {
       const formData = new FormData();
-      formData.append("file", selectedFile);
+      formData.append('file', selectedFile);
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 120_000);
       let res: Response;
       try {
         res = await fetch(`${API_URL}/questions/generate/from-file`, {
-          method: "POST",
+          method: 'POST',
           body: formData,
           signal: controller.signal,
         });
@@ -201,12 +196,12 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
       const data: GenerationResult = await res.json();
       setResult(data);
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        setApiError("请求超时，文件可能过大或内容过多，请稍后重试");
-      } else if (err instanceof TypeError && err.message === "Failed to fetch") {
-        setApiError("无法连接后端服务，请确认后端已启动");
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setApiError('请求超时，文件可能过大或内容过多，请稍后重试');
+      } else if (err instanceof TypeError && err.message === 'Failed to fetch') {
+        setApiError('无法连接后端服务，请确认后端已启动');
       } else if (err instanceof Response) {
-        let detail = "";
+        let detail = '';
         try {
           detail = await err.text();
         } catch {
@@ -214,19 +209,19 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
         }
         switch (err.status) {
           case 413:
-            setApiError("文件过大，请选择更小的文件");
+            setApiError('文件过大，请选择更小的文件');
             break;
           case 422:
-            setApiError("文件格式无法解析，请检查文件内容");
+            setApiError('文件格式无法解析，请检查文件内容');
             break;
           case 500:
-            setApiError("后端处理出错，请稍后重试");
+            setApiError('后端处理出错，请稍后重试');
             break;
           default:
             setApiError(detail || `请求失败 (${err.status})`);
         }
       } else {
-        setApiError(err instanceof Error ? err.message : "生成题目时发生未知错误");
+        setApiError(err instanceof Error ? err.message : '生成题目时发生未知错误');
       }
     } finally {
       setIsLoading(false);
@@ -245,14 +240,14 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
             onDragLeave={handleDragLeave}
             className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed py-12 sm:py-20 text-center transition-colors ${
               isDragOver
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-primary/50"
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:border-primary/50'
             }`}
             onClick={() => inputRef.current?.click()}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+              if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
             }}
           >
             <input
@@ -280,7 +275,7 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
               </svg>
             </div>
             <p className="mb-2 text-lg font-medium text-foreground">
-              {isDragOver ? "释放文件以上传" : "上传教材文件开始出题"}
+              {isDragOver ? '释放文件以上传' : '上传教材文件开始出题'}
             </p>
             <p className="mb-6 text-sm text-muted-foreground">支持 PDF、Word、纯文本格式</p>
             <Button variant="outline" type="button" onClick={(e) => e.stopPropagation()}>
@@ -299,7 +294,7 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
               <CardContent className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="inline-flex size-8 shrink-0 items-center justify-center rounded bg-primary/10 text-xs font-medium text-primary">
-                    {selectedFile.name.split(".").pop()?.toUpperCase()}
+                    {selectedFile.name.split('.').pop()?.toUpperCase()}
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">{selectedFile.name}</p>
@@ -310,9 +305,9 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
                   <Button
                     size="sm"
                     onClick={handleGenerate}
-                    disabled={isLoading || healthStatus === "disconnected"}
+                    disabled={isLoading || healthStatus === 'disconnected'}
                   >
-                    {isLoading ? "生成中..." : "生成题目"}
+                    {isLoading ? '生成中...' : '生成题目'}
                   </Button>
                   <Button variant="ghost" size="sm" onClick={handleClear}>
                     移除
@@ -347,35 +342,35 @@ function FileUpload({ healthStatus }: { healthStatus: HealthStatus }) {
 /* ── Structured result display components ── */
 
 const CATEGORY_COLORS: Record<string, string> = {
-  concept: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  formula: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  procedure: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  fact: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  principle: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  concept: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  formula: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  procedure: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  fact: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  principle: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  concept: "概念",
-  formula: "公式",
-  procedure: "过程",
-  fact: "事实",
-  principle: "原理",
+  concept: '概念',
+  formula: '公式',
+  procedure: '过程',
+  fact: '事实',
+  principle: '原理',
 };
 
 const QUESTION_TYPE_LABELS: Record<string, string> = {
-  definition: "定义",
-  calculation: "计算",
-  analysis: "分析",
-  verification: "验证",
-  application: "应用",
+  definition: '定义',
+  calculation: '计算',
+  analysis: '分析',
+  verification: '验证',
+  application: '应用',
 };
 
 const QUESTION_TYPE_COLORS: Record<string, string> = {
-  definition: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  calculation: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  analysis: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  verification: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  application: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
+  definition: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+  calculation: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  analysis: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  verification: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  application: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
 };
 
 function EmptyState({ message }: { message: string }) {
@@ -397,8 +392,8 @@ function StructuredResult({
 }) {
   const { chapters, knowledge_points, questions, generation_stats } = result;
 
-  const hasSuccess = questions.some((q) => q.status === "success");
-  const hasFailed = questions.some((q) => q.status === "failed");
+  const hasSuccess = questions.some((q) => q.status === 'success');
+  const hasFailed = questions.some((q) => q.status === 'failed');
 
   return (
     <div className="space-y-6">
@@ -519,7 +514,7 @@ function KnowledgePointsSection({ knowledgePoints }: { knowledgePoints: Knowledg
                     <span
                       key={j}
                       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                        CATEGORY_COLORS[tag.category] ?? "bg-muted text-muted-foreground"
+                        CATEGORY_COLORS[tag.category] ?? 'bg-muted text-muted-foreground'
                       }`}
                     >
                       {CATEGORY_LABELS[tag.category] ?? tag.category}
@@ -539,8 +534,8 @@ function KnowledgePointsSection({ knowledgePoints }: { knowledgePoints: Knowledg
 }
 
 function QuestionsSection({ questions }: { questions: Question[] }) {
-  const successQuestions = questions.filter((q) => q.status === "success");
-  const failedQuestions = questions.filter((q) => q.status === "failed");
+  const successQuestions = questions.filter((q) => q.status === 'success');
+  const failedQuestions = questions.filter((q) => q.status === 'failed');
 
   return (
     <div className="space-y-4">
@@ -600,7 +595,7 @@ function QuestionCard({ question, index }: { question: Question; index: number }
         </h4>
         <Badge
           variant="secondary"
-          className={`shrink-0 ${QUESTION_TYPE_COLORS[question.question_type] ?? ""}`}
+          className={`shrink-0 ${QUESTION_TYPE_COLORS[question.question_type] ?? ''}`}
         >
           {QUESTION_TYPE_LABELS[question.question_type] ?? question.question_type}
         </Badge>
