@@ -21,7 +21,7 @@ class TestChatNodeEdgeCases:
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
-        with patch("question_agent.chat.graph._create_llm", return_value=mock_llm):
+        with patch("question_agent.chat.graph._create_llm_with_tools", return_value=mock_llm):
             result = await chat_node({"messages": []})
 
         assert "messages" in result
@@ -36,7 +36,7 @@ class TestChatNodeEdgeCases:
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
-        with patch("question_agent.chat.graph._create_llm", return_value=mock_llm):
+        with patch("question_agent.chat.graph._create_llm_with_tools", return_value=mock_llm):
             result = await chat_node({"messages": [HumanMessage(content=long_content)]})
 
         assert len(result["messages"]) == 1
@@ -51,7 +51,7 @@ class TestChatNodeEdgeCases:
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
-        with patch("question_agent.chat.graph._create_llm", return_value=mock_llm):
+        with patch("question_agent.chat.graph._create_llm_with_tools", return_value=mock_llm):
             result = await chat_node({"messages": [HumanMessage(content=special_content)]})
 
         assert len(result["messages"]) == 1
@@ -70,7 +70,7 @@ class TestChatNodeEdgeCases:
             AIMessage(content="补充说明"),
         ]
 
-        with patch("question_agent.chat.graph._create_llm", return_value=mock_llm):
+        with patch("question_agent.chat.graph._create_llm_with_tools", return_value=mock_llm):
             result = await chat_node({"messages": history})
 
         assert len(result["messages"]) == 1
@@ -126,7 +126,7 @@ class TestMissingApiKey:
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
-        with patch("question_agent.chat.graph._create_llm", return_value=mock_llm):
+        with patch("question_agent.chat.graph._create_llm_with_tools", return_value=mock_llm):
             result = await chat_node({"messages": [HumanMessage(content="test")]})
 
         # Should still work since we mock the LLM

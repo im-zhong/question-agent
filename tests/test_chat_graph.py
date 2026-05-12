@@ -28,7 +28,7 @@ async def test_chat_node_returns_ai_message() -> None:
     mock_llm = MagicMock()
     mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
-    with patch("question_agent.chat.graph._create_llm", return_value=mock_llm):
+    with patch("question_agent.chat.graph._create_llm_with_tools", return_value=mock_llm):
         result = await chat_node({"messages": [HumanMessage(content="你好")]})
 
     assert "messages" in result
@@ -50,7 +50,7 @@ async def test_chat_node_accumulates_history() -> None:
         HumanMessage(content="你能帮我吗？"),
     ]
 
-    with patch("question_agent.chat.graph._create_llm", return_value=mock_llm):
+    with patch("question_agent.chat.graph._create_llm_with_tools", return_value=mock_llm):
         result = await chat_node({"messages": history})
 
     # Verify LLM received the full history

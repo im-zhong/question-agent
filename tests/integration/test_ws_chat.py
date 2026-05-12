@@ -3,11 +3,7 @@
 Requires a running server with GLM_API_KEY configured.
 """
 
-import asyncio
-import json
-
 import pytest
-from starlette.websockets import WebSocketDisconnect
 
 BASE_WS_URL = "ws://localhost:8000"
 
@@ -48,8 +44,6 @@ class TestWsChatWalkthrough:
         from starlette.testclient import TestClient
 
         from question_agent.main import app
-
-        responses: list[str] = []
 
         with TestClient(app) as client:
             # Connection 1
