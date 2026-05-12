@@ -26,6 +26,8 @@ class Settings(BaseSettings):
 
     # --- Paths ---
     project_root: Path = Path(__file__).resolve().parent.parent
+    chat_db_path: Path = Path("data/chat.db")
+    kb_db_path: Path = project_root / "data" / "kb.db"
 
     # --- API ---
     debug: bool = True
