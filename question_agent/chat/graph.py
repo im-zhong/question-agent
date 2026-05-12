@@ -1,10 +1,10 @@
-"""LangGraph StateGraph with GLM-5 chat node and tool nodes."""
+"""LangGraph StateGraph with ReAct agent loop: chat → tools → chat."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -42,6 +42,14 @@ async def chat_node(state: MessagesState) -> dict[str, list[BaseMessage]]:
     return {"messages": [response]}
 
 
+def _should_continue(state: MessagesState) -> Literal["tools", "__end__"]:
+    """Conditional edge: route to tools if the last AI message has tool_calls."""
+    last_message = state["messages"][-1]
+    if isinstance(last_message, AIMessage) and last_message.tool_calls:
+        return "tools"
+    return "__end__"
+
+
 def get_checkpointer() -> MemorySaver:
     """Return a singleton MemorySaver for checkpoint storage."""
     global _checkpointer  # noqa: PLW0603
@@ -51,10 +59,11 @@ def get_checkpointer() -> MemorySaver:
 
 
 def create_chat_graph() -> CompiledStateGraph[MessagesState, None, MessagesState, MessagesState]:
-    """Build and compile the chat StateGraph with MemorySaver checkpointer."""
+    """Build and compile the ReAct agent StateGraph with MemorySaver checkpointer."""
     graph = StateGraph(MessagesState)
     graph.add_node("chat", chat_node)
     graph.add_node("tools", ToolNode(ALL_TOOLS))
     graph.add_edge(START, "chat")
-    graph.add_edge("chat", END)
+    graph.add_conditional_edges("chat", _should_continue, {"tools": "tools", "__end__": END})
+    graph.add_edge("tools", "chat")
     return graph.compile(checkpointer=get_checkpointer())

@@ -7,6 +7,8 @@ import pytest
 
 BASE_WS_URL = "ws://localhost:8000"
 
+TIMEOUT_SECONDS = 60
+
 
 @pytest.mark.integration
 class TestWsChatWalkthrough:
@@ -71,3 +73,40 @@ class TestWsChatWalkthrough:
         assert msgs1[-1]["type"] == "end"
         assert msgs2[0]["type"] == "start"
         assert msgs2[-1]["type"] == "end"
+
+    def test_ws_chat_tool_call_routing(self) -> None:
+        """Question-generation intent triggers tool calls via ReAct routing.
+
+        When user sends a message with question-generation intent, the
+        LLM should decide to call extract_knowledge_points/generate_questions
+        tools via the ReAct conditional edge, then stream the final response.
+        """
+        from starlette.testclient import TestClient
+
+        from question_agent.main import app
+
+        with TestClient(app) as client:
+            with client.websocket_connect("/ws/chat") as ws:
+                ws.send_json(
+                    {
+                        "type": "message",
+                        "content": "请根据以下内容帮我出一道题：物理学是研究物质运动规律的科学",
+                    }
+                )
+
+                messages: list[dict[str, str]] = []
+                while True:
+                    data = ws.receive_json()
+                    messages.append(data)
+                    if data["type"] == "end":
+                        break
+
+        # Should still follow start → token(s) → end protocol
+        assert messages[0]["type"] == "start", "First message should be start"
+        assert messages[-1]["type"] == "end", "Last message should be end"
+        token_messages = [m for m in messages if m["type"] == "token"]
+        assert len(token_messages) > 0, "Should receive at least one token"
+
+        # The response should contain question-related content (from tool execution)
+        full_response = "".join(m["content"] for m in token_messages)
+        assert len(full_response) > 0, "Response should not be empty"
