@@ -1,9 +1,9 @@
-import { createRootRoute, Outlet } from '@tanstack/react-router';
+import { createRootRoute, Link, Outlet } from '@tanstack/react-router';
 import { useState } from 'react';
 import { ChatSidebar } from '@/components/chat-sidebar';
 import { ChatProvider, useChat } from '@/lib/chat-context';
 import { Button } from '@/components/ui/button';
-import { PanelLeft, PanelLeftClose } from 'lucide-react';
+import { Database, MessageSquare, PanelLeft, PanelLeftClose } from 'lucide-react';
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -42,6 +42,22 @@ function RootLayoutInner() {
             {sidebarCollapsed ? <PanelLeft className="size-4" /> : <PanelLeftClose className="size-4" />}
           </Button>
           <h1 className="text-sm font-medium">智能出题</h1>
+          <nav className="ml-4 flex gap-1">
+            <Link
+              to="/chat"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&.active]:bg-muted [&.active]:text-foreground"
+            >
+              <MessageSquare className="size-3.5" />
+              对话
+            </Link>
+            <Link
+              to="/knowledge-bases"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground [&.active]:bg-muted [&.active]:text-foreground"
+            >
+              <Database className="size-3.5" />
+              知识库
+            </Link>
+          </nav>
         </header>
         <main className="flex-1 overflow-hidden">
           <Outlet />
