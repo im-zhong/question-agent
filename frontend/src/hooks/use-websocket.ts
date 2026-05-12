@@ -2,9 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting';
 
+export interface WsMessage {
+  type: string;
+  content?: string;
+  conversation_id?: string;
+  messages?: { role: string; content: string }[];
+}
+
 interface UseWebSocketOptions {
   url: string;
-  onMessage?: (data: { type: string; content: string }) => void;
+  onMessage?: (data: WsMessage) => void;
 }
 
 export function useWebSocket({ url, onMessage }: UseWebSocketOptions) {
@@ -25,7 +32,7 @@ export function useWebSocket({ url, onMessage }: UseWebSocketOptions) {
 
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data) as { type: string; content: string };
+        const data = JSON.parse(event.data) as WsMessage;
         onMessageRef.current?.(data);
       } catch {
         // ignore malformed messages
@@ -49,7 +56,7 @@ export function useWebSocket({ url, onMessage }: UseWebSocketOptions) {
     setStatus('disconnected');
   }, []);
 
-  const send = useCallback((data: { type: string; content: string }) => {
+  const send = useCallback((data: { type: string; content: string; kb_id?: string }) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data));
     }

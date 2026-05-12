@@ -3,16 +3,29 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '@/components/ui/button';
+import {
+  KnowledgePointsList,
+  QuestionsList,
+  type KnowledgePoint,
+  type Question,
+} from '@/components/chat-cards';
 import { useWebSocket, type ConnectionStatus } from '@/hooks/use-websocket';
 import { useChat, createMessageId } from '@/lib/chat-context';
 import type { ChatMessage } from '@/lib/chat-context';
-import { SendHorizonal, Wifi, WifiOff, Loader2, RefreshCw } from 'lucide-react';
+import { SendHorizonal, Wifi, WifiOff, Loader2, RefreshCw, Database } from 'lucide-react';
+
+interface KbOption {
+  id: string;
+  name: string;
+}
 
 export const Route = createFileRoute('/chat')({
   component: ChatPage,
 });
 
-const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/chat`;
+function wsBaseUrl(): string {
+  return `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/chat`;
+}
 
 function ChatPage() {
   const {
@@ -20,29 +33,49 @@ function ChatPage() {
     activeId,
     addMessage,
     appendToMessage,
+    addStructuredData,
     createConversation,
     streamingMessageId,
     setStreamingMessageId,
+    loadHistoryMessages,
   } = useChat();
   const [input, setInput] = useState('');
+  const [kbList, setKbList] = useState<KbOption[]>([]);
+  const [selectedKbId, setSelectedKbId] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamingMsgIdRef = useRef<number | null>(null);
 
-  // Auto-scroll on new content
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeConversation?.messages, streamingMessageId]);
+  // Build WS URL with conversation_id
+  const wsUrl = activeId ? `${wsBaseUrl()}?conversation_id=${encodeURIComponent(activeId)}` : wsBaseUrl();
 
   const handleWebSocketMessage = useCallback(
-    (data: { type: string; content?: string }) => {
+    (data: {
+      type: string;
+      content?: string;
+      tool?: string;
+      conversation_id?: string;
+      messages?: { role: string; content: string }[];
+    }) => {
       if (!activeId) return;
 
-      if (data.type === 'start') {
+      if (data.type === 'history' && data.messages) {
+        const historyMsgs: ChatMessage[] = data.messages.map((m, i) => ({
+          id: -(i + 1),
+          role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
+          content: m.content,
+        }));
+        loadHistoryMessages(activeId, historyMsgs);
+      } else if (data.type === 'start') {
         const id = createMessageId();
         streamingMsgIdRef.current = id;
         setStreamingMessageId(id);
         const msg: ChatMessage = { id, role: 'assistant', content: '' };
         addMessage(activeId, msg);
+      } else if (data.type === 'data' && streamingMsgIdRef.current !== null && data.tool && data.content) {
+        addStructuredData(activeId, streamingMsgIdRef.current, {
+          tool: data.tool as 'extract_knowledge_points' | 'generate_questions',
+          content: data.content,
+        });
       } else if (data.type === 'token' && streamingMsgIdRef.current !== null && data.content) {
         appendToMessage(activeId, streamingMsgIdRef.current, data.content);
       } else if (data.type === 'end') {
@@ -50,13 +83,26 @@ function ChatPage() {
         setStreamingMessageId(null);
       }
     },
-    [activeId, addMessage, appendToMessage, setStreamingMessageId],
+    [activeId, addMessage, addStructuredData, appendToMessage, setStreamingMessageId, loadHistoryMessages],
   );
 
   const { status, send, connect } = useWebSocket({
-    url: WS_URL,
+    url: wsUrl,
     onMessage: handleWebSocketMessage,
   });
+
+  // Auto-scroll on new content
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [activeConversation?.messages, streamingMessageId]);
+
+  // Fetch knowledge base list on mount
+  useEffect(() => {
+    fetch('/api/v1/knowledge-bases')
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: KbOption[]) => setKbList(data))
+      .catch(() => setKbList([]));
+  }, []);
 
   const sendMessage = useCallback(() => {
     const text = input.trim();
@@ -65,7 +111,7 @@ function ChatPage() {
     const convId = activeId ?? createConversation();
     const userMsg: ChatMessage = { id: createMessageId(), role: 'user', content: text };
     addMessage(convId, userMsg);
-    send({ type: 'message', content: text });
+    send({ type: 'message', content: text, ...(selectedKbId ? { kb_id: selectedKbId } : {}) });
     setInput('');
   }, [input, status, activeId, createConversation, addMessage, send]);
 
@@ -113,6 +159,29 @@ function ChatPage() {
 
       {/* Input */}
       <div className="border-t border-border bg-background px-4 py-3">
+        {kbList.length > 0 && (
+          <div className="mx-auto mb-2 flex max-w-3xl items-center gap-2">
+            <Database className="size-3.5 text-muted-foreground" />
+            <select
+              value={selectedKbId}
+              onChange={(e) => setSelectedKbId(e.target.value)}
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="">未选择知识库</option>
+              {kbList.map((kb) => (
+                <option key={kb.id} value={kb.id}>{kb.name}</option>
+              ))}
+            </select>
+            {selectedKbId && (
+              <button
+                onClick={() => setSelectedKbId('')}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                清除
+              </button>
+            )}
+          </div>
+        )}
         <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-xl border border-input bg-background px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-ring">
           <textarea
             value={input}
@@ -158,6 +227,31 @@ function statusLabel(status: ConnectionStatus): string {
 function MessageBubble({ message, isStreaming }: { message: ChatMessage; isStreaming: boolean }) {
   const isUser = message.role === 'user';
 
+  // Parse structured data sections
+  const structuredSections: React.ReactNode[] = [];
+  if (message.structuredData) {
+    for (const sd of message.structuredData) {
+      try {
+        if (sd.tool === 'extract_knowledge_points') {
+          const points: KnowledgePoint[] = JSON.parse(sd.content);
+          if (points.length > 0) {
+            structuredSections.push(<KnowledgePointsList key={`kp-${points.length}`} points={points} />);
+          }
+        } else if (sd.tool === 'generate_questions') {
+          const parsed = JSON.parse(sd.content);
+          const questions: Question[] = parsed.questions ?? [];
+          if (questions.length > 0) {
+            structuredSections.push(<QuestionsList key={`q-${questions.length}`} questions={questions} />);
+          }
+        }
+      } catch {
+        // Skip invalid JSON
+      }
+    }
+  }
+
+  const hasStructuredData = structuredSections.length > 0;
+
   return (
     <div className={`mb-4 flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
       <div
@@ -178,11 +272,19 @@ function MessageBubble({ message, isStreaming }: { message: ChatMessage; isStrea
       >
         {isUser ? (
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
-        ) : message.content ? (
-          <div className="prose prose-sm max-w-none break-words dark:prose-invert [&_pre]:rounded-md [&_pre]:bg-background [&_pre]:p-3 [&_code]:text-xs">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-            {isStreaming && <span className="inline-block w-0.5 animate-pulse bg-foreground" />}
-          </div>
+        ) : message.content || hasStructuredData ? (
+          <>
+            {message.content && (
+              <div className="prose prose-sm max-w-none break-words dark:prose-invert [&_pre]:rounded-md [&_pre]:bg-background [&_pre]:p-3 [&_code]:text-xs">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                {isStreaming && <span className="inline-block w-0.5 animate-pulse bg-foreground" />}
+              </div>
+            )}
+            {structuredSections}
+            {isStreaming && !message.content && !hasStructuredData && (
+              <span className="inline-block animate-pulse text-muted-foreground">正在输入...</span>
+            )}
+          </>
         ) : (
           <span className="inline-block animate-pulse text-muted-foreground">正在输入...</span>
         )}
