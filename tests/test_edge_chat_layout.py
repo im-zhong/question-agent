@@ -151,7 +151,7 @@ class TestWebSocketBackendEndpoint:
         assert '"start"' in content, "Should send start event"
         assert '"token"' in content, "Should send token events"
         assert '"end"' in content, "Should send end event"
-        assert "asyncio.sleep" in content, "Should have delay between tokens"
+        assert "astream" in content, "Should use LangGraph streaming"
 
     def test_frontend_handles_start_token_end(self) -> None:
         content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()

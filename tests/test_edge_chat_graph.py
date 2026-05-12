@@ -108,16 +108,7 @@ class TestGetCheckpointerEdgeCases:
 
     def test_checkpointer_stores_and_retrieves(self) -> None:
         """MemorySaver can store and retrieve a checkpoint."""
-        import uuid
-
-        from langgraph.graph import MessagesState
-
         cp = get_checkpointer()
-        thread_id = str(uuid.uuid4())
-        config = {"configurable": {"thread_id": thread_id}}
-
-        # MemorySaver should not crash on tuple operations
-        # Just verify it accepts a config without error
         assert cp is not None
 
 

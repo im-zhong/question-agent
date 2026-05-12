@@ -2,6 +2,7 @@
 
 import os
 import time
+import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -9,11 +10,14 @@ from typing import Any
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from langchain_core.messages import AIMessageChunk, HumanMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from starlette import status
 
 from question_agent import __version__
 from question_agent.chapters import build_chapter_tree, detect_chapters_hybrid
+from question_agent.chat.graph import create_chat_graph
 from question_agent.config import settings
 from question_agent.extractors import (
     ExtractionError,
@@ -29,6 +33,7 @@ from question_agent.knowledge import (
     build_chapter_windows,
     extract_knowledge_points_hybrid,
 )
+from question_agent.logging_config import setup_logging
 from question_agent.questions import generate_questions
 from question_agent.questions.generator import _KpInput
 from question_agent.questions.models import QuestionType
@@ -198,6 +203,7 @@ def _detect_format(filename: str, content_type: str | None) -> str | None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan — startup and shutdown events."""
+    setup_logging()
     yield
 
 
@@ -234,18 +240,38 @@ async def health_check() -> JSONResponse:
 
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket) -> None:
-    """WebSocket streaming echo endpoint for chat prototyping."""
-    import asyncio
+    """WebSocket streaming endpoint — GLM-5 chat via LangGraph."""
+    import logging
+
+    from langgraph.graph import MessagesState
+
+    logger = logging.getLogger(__name__)
+    graph = create_chat_graph()
+    thread_id = str(uuid.uuid4())
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_json()
+            if data.get("type") != "message":
+                continue
             content = data.get("content", "")
+            if not content:
+                continue
+
+            input_msg: MessagesState = {"messages": [HumanMessage(content=content)]}
             await websocket.send_json({"type": "start"})
-            for char in content:
-                await websocket.send_json({"type": "token", "content": char})
-                await asyncio.sleep(0.03)
+
+            try:
+                async for event in graph.astream(input_msg, config=config, stream_mode="messages"):
+                    msg, _meta = event
+                    if isinstance(msg, AIMessageChunk) and msg.content:
+                        await websocket.send_json({"type": "token", "content": msg.content})
+            except Exception:
+                logger.warning("LLM streaming error", exc_info=True)
+                await websocket.send_json({"type": "error", "content": "AI 响应出错，请重试"})
+
             await websocket.send_json({"type": "end"})
     except WebSocketDisconnect:
         pass

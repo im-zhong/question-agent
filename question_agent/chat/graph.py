@@ -22,6 +22,7 @@ def _create_llm() -> ChatOpenAI:
         model=settings.glm_model,
         api_key=SecretStr(settings.glm_api_key),
         base_url=_ZHIPU_BASE_URL,
+        streaming=True,
     )
 
 
