@@ -124,3 +124,23 @@ async def test_questions_generate_from_file(client: httpx.AsyncClient) -> None:
     assert "knowledge_points" in data
     assert "questions" in data
     assert "generation_stats" in data
+
+
+@pytest.mark.asyncio
+async def test_knowledge_bases_crud(client: httpx.AsyncClient) -> None:
+    """POST/GET /api/v1/knowledge-bases creates and lists knowledge bases."""
+    resp = await client.post(
+        "/api/v1/knowledge-bases",
+        json={"name": "Walkthrough KB", "subject": "数学", "grade_level": "高中"},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["name"] == "Walkthrough KB"
+    assert data["subject"] == "数学"
+    assert "id" in data
+
+    resp = await client.get("/api/v1/knowledge-bases")
+    assert resp.status_code == 200
+    kbs = resp.json()
+    assert isinstance(kbs, list)
+    assert any(kb["name"] == "Walkthrough KB" for kb in kbs)
