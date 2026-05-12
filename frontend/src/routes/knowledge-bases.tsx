@@ -7,6 +7,9 @@ import { Database, Plus, Loader2, FolderOpen } from 'lucide-react';
 
 const API_URL = '/api/v1';
 
+const SUBJECTS = ['语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理', '政治'] as const;
+const GRADE_LEVELS = ['小学', '初中', '高中', '大学'] as const;
+
 interface KnowledgeBase {
   id: string;
   name: string;
@@ -29,6 +32,8 @@ function KnowledgeBasesPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [subject, setSubject] = useState('');
+  const [gradeLevel, setGradeLevel] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const fetchKbs = useCallback(async () => {
@@ -57,7 +62,12 @@ function KnowledgeBasesPage() {
       const res = await fetch(`${API_URL}/knowledge-bases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), description: description.trim() || null }),
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || null,
+          subject: subject || null,
+          grade_level: gradeLevel || null,
+        }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
@@ -65,6 +75,8 @@ function KnowledgeBasesPage() {
       }
       setName('');
       setDescription('');
+      setSubject('');
+      setGradeLevel('');
       setShowCreate(false);
       await fetchKbs();
     } catch (err) {
@@ -72,7 +84,7 @@ function KnowledgeBasesPage() {
     } finally {
       setCreating(false);
     }
-  }, [name, description, fetchKbs]);
+  }, [name, description, subject, gradeLevel, fetchKbs]);
 
   return (
     <div className="flex h-full flex-col">
@@ -114,6 +126,24 @@ function KnowledgeBasesPage() {
                 rows={2}
                 className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
+              <div className="flex gap-3">
+                <select
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">选择学科（可选）</option>
+                  {SUBJECTS.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select
+                  value={gradeLevel}
+                  onChange={(e) => setGradeLevel(e.target.value)}
+                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">选择学段（可选）</option>
+                  {GRADE_LEVELS.map((g) => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </div>
               {error && <p className="text-xs text-destructive">{error}</p>}
               <div className="flex gap-2">
                 <Button size="sm" onClick={handleCreate} disabled={!name.trim() || creating}>
@@ -149,6 +179,9 @@ function KnowledgeBasesPage() {
                       <h3 className="truncate text-sm font-medium">{kb.name}</h3>
                       {kb.subject && (
                         <Badge variant="secondary" className="shrink-0 text-xs">{kb.subject}</Badge>
+                      )}
+                      {kb.grade_level && (
+                        <Badge variant="outline" className="shrink-0 text-xs">{kb.grade_level}</Badge>
                       )}
                     </div>
                     {kb.description && (
