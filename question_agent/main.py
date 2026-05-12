@@ -9,8 +9,8 @@ from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from langchain_core.messages import AIMessageChunk, HumanMessage
+from fastapi.responses import JSONResponse, Response
+from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel
 from starlette import status
@@ -28,6 +28,7 @@ from question_agent.extractors import (
     extract_text,
     extract_text_structured,
 )
+from question_agent.kb import router as kb_router
 from question_agent.knowledge import (
     ChapterWindow,
     build_chapter_windows,
@@ -142,6 +143,8 @@ class KnowledgePointInput(BaseModel):
 
 class QuestionGenerateRequest(BaseModel):
     knowledge_points: list[KnowledgePointInput]
+    difficulty: str = "intermediate"
+    question_type: str | None = None
 
 
 class QuestionOptionResponse(BaseModel):
@@ -153,6 +156,10 @@ class QuestionStemResponse(BaseModel):
     id: int
     stem_text: str
     options: list[QuestionOptionResponse]
+    correct_answer: str | None = None
+    reference_answer: str | None = None
+    explanation: str | None = None
+    difficulty: str = "intermediate"
     knowledge_point_name: str
     question_type: QuestionType
     status: str
@@ -204,7 +211,11 @@ def _detect_format(filename: str, content_type: str | None) -> str | None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan — startup and shutdown events."""
     setup_logging()
+    from question_agent.kb import close_db, init_db
+
+    await init_db()
     yield
+    await close_db()
 
 
 app = FastAPI(
@@ -226,6 +237,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(kb_router)
+
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check() -> JSONResponse:
@@ -239,18 +252,36 @@ async def health_check() -> JSONResponse:
 
 
 @app.websocket("/ws/chat")
-async def ws_chat(websocket: WebSocket) -> None:
+async def ws_chat(
+    websocket: WebSocket,
+    conversation_id: str | None = Query(default=None),
+) -> None:
     """WebSocket streaming endpoint — GLM-5 chat via LangGraph."""
     import logging
 
+    from langchain_core.messages import AIMessage
+    from langchain_core.messages import HumanMessage as HMsg
     from langgraph.graph import MessagesState
 
     logger = logging.getLogger(__name__)
-    graph = create_chat_graph()
-    thread_id = str(uuid.uuid4())
+    graph = await create_chat_graph()
+    thread_id = conversation_id if conversation_id else str(uuid.uuid4())
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     await websocket.accept()
+
+    # Replay history for existing conversations
+    if conversation_id:
+        checkpoint = await graph.aget_state(config)
+        if checkpoint and checkpoint.values.get("messages"):
+            history: list[dict[str, str]] = []
+            for msg in checkpoint.values["messages"]:
+                if isinstance(msg, (HMsg, AIMessage)):
+                    role = "user" if isinstance(msg, HMsg) else "ai"
+                    history.append({"role": role, "content": str(msg.content)})
+            if history:
+                await websocket.send_json({"type": "history", "messages": history})
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -261,13 +292,20 @@ async def ws_chat(websocket: WebSocket) -> None:
                 continue
 
             input_msg: MessagesState = {"messages": [HumanMessage(content=content)]}
-            await websocket.send_json({"type": "start"})
+            await websocket.send_json({"type": "start", "conversation_id": thread_id})
 
             try:
                 async for event in graph.astream(input_msg, config=config, stream_mode="messages"):
                     msg, _meta = event
                     if isinstance(msg, AIMessageChunk) and msg.content:
                         await websocket.send_json({"type": "token", "content": msg.content})
+                    elif isinstance(msg, ToolMessage) and msg.name in (
+                        "extract_knowledge_points",
+                        "generate_questions",
+                    ):
+                        await websocket.send_json(
+                            {"type": "data", "tool": msg.name, "content": msg.content}
+                        )
             except Exception:
                 logger.warning("LLM streaming error", exc_info=True)
                 await websocket.send_json({"type": "error", "content": "AI 响应出错，请重试"})
@@ -697,7 +735,11 @@ async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
         for kp in request.knowledge_points
     ]
 
-    questions, gen_stats = await generate_questions(kp_inputs)
+    questions, gen_stats = await generate_questions(
+        kp_inputs,
+        difficulty=request.difficulty,  # type: ignore[arg-type]
+        question_type=request.question_type,
+    )
 
     return JSONResponse(
         content=QuestionGenerateResponse(
@@ -706,6 +748,9 @@ async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
                     id=q.id,
                     stem_text=q.stem_text,
                     options=[QuestionOptionResponse(label=o.label, text=o.text) for o in q.options],
+                    correct_answer=q.correct_answer,
+                    reference_answer=q.reference_answer,
+                    difficulty=q.difficulty,
                     knowledge_point_name=q.knowledge_point_name,
                     question_type=q.question_type,
                     status=q.status,
@@ -722,7 +767,11 @@ async def questions_generate(request: QuestionGenerateRequest) -> JSONResponse:
 
 
 @app.post("/questions/generate/from-file")
-async def questions_generate_from_file(file: UploadFile = File(...)) -> JSONResponse:
+async def questions_generate_from_file(
+    file: UploadFile = File(...),
+    difficulty: str = Query("intermediate", pattern="^(basic|intermediate|advanced)$"),
+    question_type: str | None = Query(None),
+) -> JSONResponse:
     """Generate questions from an uploaded document.
 
     Full pipeline: extract paragraphs → detect chapters → build windows →
@@ -863,7 +912,11 @@ async def questions_generate_from_file(file: UploadFile = File(...)) -> JSONResp
         )
         for kp in kp_result["knowledge_points"]
     ]
-    questions, gen_stats = await generate_questions(kp_inputs)
+    questions, gen_stats = await generate_questions(
+        kp_inputs,
+        difficulty=difficulty,  # type: ignore[arg-type]
+        question_type=question_type,
+    )
 
     return JSONResponse(
         content=QuestionFromFileResponse(
@@ -875,6 +928,9 @@ async def questions_generate_from_file(file: UploadFile = File(...)) -> JSONResp
                     id=q.id,
                     stem_text=q.stem_text,
                     options=[QuestionOptionResponse(label=o.label, text=o.text) for o in q.options],
+                    correct_answer=q.correct_answer,
+                    reference_answer=q.reference_answer,
+                    difficulty=q.difficulty,
                     knowledge_point_name=q.knowledge_point_name,
                     question_type=q.question_type,
                     status=q.status,
@@ -888,6 +944,62 @@ async def questions_generate_from_file(file: UploadFile = File(...)) -> JSONResp
             ),
         ).model_dump()
     )
+
+
+class QuestionExportRequest(BaseModel):
+    questions: list[QuestionStemResponse]
+    format: str = "markdown"
+
+
+_DIFFICULTY_LABELS: dict[str, str] = {"basic": "基础", "intermediate": "中等", "advanced": "提高"}
+_TYPE_LABELS: dict[str, str] = {
+    "definition": "定义",
+    "calculation": "计算",
+    "analysis": "分析",
+    "procedure": "过程",
+    "recall": "回忆",
+    "application": "应用",
+    "short_answer": "简答",
+    "essay": "论述",
+}
+
+
+def _questions_to_markdown(questions: list[QuestionStemResponse]) -> str:
+    """Format questions as Markdown text."""
+    lines: list[str] = ["# 题目", ""]
+    for q in questions:
+        if q.status == "failed":
+            continue
+        difficulty = _DIFFICULTY_LABELS.get(q.difficulty, q.difficulty)
+        qtype = _TYPE_LABELS.get(q.question_type, q.question_type)
+        lines.append(f"## {q.id}. {q.stem_text}")
+        lines.append("")
+        if q.options:
+            for opt in q.options:
+                marker = " ✓" if q.correct_answer and opt.label == q.correct_answer else ""
+                lines.append(f"- **{opt.label}.** {opt.text}{marker}")
+        elif q.reference_answer:
+            lines.append("**参考答案：**")
+            lines.append("")
+            lines.append(q.reference_answer)
+        lines.append("")
+        lines.append(f"> 知识点: {q.knowledge_point_name} | 难度: {difficulty} | 类型: {qtype}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+@app.post("/questions/export")
+async def questions_export(request: QuestionExportRequest) -> Response:
+    """Export questions in the specified format (markdown or json)."""
+    if request.format == "markdown":
+        text = _questions_to_markdown(request.questions)
+        return Response(
+            content=text,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=questions.md"},
+        )
+    # Default: return JSON
+    return JSONResponse(content={"questions": [q.model_dump() for q in request.questions]})
 
 
 def main() -> None:

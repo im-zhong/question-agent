@@ -24,9 +24,7 @@ class TestKnowledgeBaseModel:
         from datetime import UTC, datetime
 
         now = datetime.now(UTC)
-        kb = KnowledgeBase(
-            id="abc123", name="Test KB", created_at=now, updated_at=now
-        )
+        kb = KnowledgeBase(id="abc123", name="Test KB", created_at=now, updated_at=now)
         assert kb.document_count == 0
         assert kb.description is None
         assert kb.subject is None
@@ -88,9 +86,7 @@ class TestKbDatabaseCreateAndList:
 
 class TestKbDatabaseConcurrency:
     async def test_concurrent_creates_dont_corrupt(self) -> None:
-        await asyncio.gather(
-            *[create_kb(KnowledgeBaseCreate(name=f"KB-{i}")) for i in range(5)]
-        )
+        await asyncio.gather(*[create_kb(KnowledgeBaseCreate(name=f"KB-{i}")) for i in range(5)])
         kbs = await list_kbs()
         assert len(kbs) == 5
 
