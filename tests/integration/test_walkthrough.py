@@ -128,9 +128,9 @@ async def test_questions_generate_from_file(client: httpx.AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_knowledge_bases_crud(client: httpx.AsyncClient) -> None:
-    """POST/GET /api/v1/knowledge-bases creates and lists knowledge bases."""
+    """POST/GET /v1/knowledge-bases creates and lists knowledge bases (direct backend path)."""
     resp = await client.post(
-        "/api/v1/knowledge-bases",
+        "/v1/knowledge-bases",
         json={"name": "Walkthrough KB", "subject": "数学", "grade_level": "高中"},
     )
     assert resp.status_code == 201
@@ -139,8 +139,66 @@ async def test_knowledge_bases_crud(client: httpx.AsyncClient) -> None:
     assert data["subject"] == "数学"
     assert "id" in data
 
-    resp = await client.get("/api/v1/knowledge-bases")
+    resp = await client.get("/v1/knowledge-bases")
     assert resp.status_code == 200
     kbs = resp.json()
     assert isinstance(kbs, list)
     assert any(kb["name"] == "Walkthrough KB" for kb in kbs)
+
+
+@pytest.mark.asyncio
+async def test_kb_document_upload_and_list(client: httpx.AsyncClient) -> None:
+    """POST /v1/knowledge-bases/{kb_id}/documents uploads a file and GET lists it (direct backend)."""
+    # Create a KB
+    resp = await client.post(
+        "/v1/knowledge-bases",
+        json={"name": "Upload Walkthrough KB"},
+    )
+    assert resp.status_code == 201
+    kb_id = resp.json()["id"]
+
+    # Upload a text file
+    text = "实数包括有理数和无理数。函数是一种特殊的对应关系。"
+    resp = await client.post(
+        f"/v1/knowledge-bases/{kb_id}/documents",
+        files={"file": ("math.txt", text.encode(), "text/plain")},
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+    assert "document" in data
+    assert data["document"]["filename"] == "math.txt"
+    assert data["document"]["format"] == "text"
+    assert data["document"]["status"] == "ready"
+    assert "knowledge_point_count" in data
+
+    # List documents
+    resp = await client.get(f"/v1/knowledge-bases/{kb_id}/documents")
+    assert resp.status_code == 200
+    docs = resp.json()
+    assert isinstance(docs, list)
+    assert len(docs) >= 1
+    assert docs[0]["filename"] == "math.txt"
+
+
+@pytest.mark.asyncio
+async def test_kb_knowledge_points_list(client: httpx.AsyncClient) -> None:
+    """GET /v1/knowledge-bases/{kb_id}/knowledge-points returns KPs after upload (direct backend)."""
+    # Create a KB and upload
+    resp = await client.post(
+        "/v1/knowledge-bases",
+        json={"name": "KP Walkthrough KB"},
+    )
+    kb_id = resp.json()["id"]
+
+    text = "第一章 力学\n牛顿第二定律描述了力等于质量乘以加速度。\n加速度是速度变化量与时间的比值。"
+    resp = await client.post(
+        f"/v1/knowledge-bases/{kb_id}/documents",
+        files={"file": ("physics.txt", text.encode(), "text/plain")},
+    )
+    assert resp.status_code == 201
+
+    # List knowledge points
+    resp = await client.get(f"/v1/knowledge-bases/{kb_id}/knowledge-points")
+    assert resp.status_code == 200
+    kps = resp.json()
+    assert isinstance(kps, list)

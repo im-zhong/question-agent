@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from typing import TypedDict
 from uuid import uuid4
 
 import aiosqlite
 
 from question_agent.config import settings
-from question_agent.kb.models import KnowledgeBase, KnowledgeBaseCreate
+from question_agent.kb.models import Document, KnowledgeBase, KnowledgeBaseCreate, KnowledgePoint
 
 _conn: aiosqlite.Connection | None = None
 _lock = asyncio.Lock()
@@ -30,7 +31,7 @@ async def get_db_conn() -> aiosqlite.Connection:
 
 
 async def init_db() -> None:
-    """Create the knowledge_bases table if it does not exist."""
+    """Create all KB tables if they do not exist."""
     conn = await get_db_conn()
     await conn.execute(
         """
@@ -43,6 +44,42 @@ async def init_db() -> None:
             document_count INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
+        )
+        """
+    )
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS documents (
+            id TEXT PRIMARY KEY,
+            kb_id TEXT NOT NULL,
+            filename TEXT NOT NULL,
+            format TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            char_count INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'uploaded',
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (kb_id) REFERENCES knowledge_bases(id)
+        )
+        """
+    )
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS knowledge_points (
+            id TEXT PRIMARY KEY,
+            document_id TEXT NOT NULL,
+            kb_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            tags_json TEXT NOT NULL DEFAULT '[]',
+            confidence REAL NOT NULL DEFAULT 0.0,
+            method TEXT NOT NULL,
+            chapter_id TEXT,
+            source_line_start INTEGER NOT NULL DEFAULT 0,
+            source_line_end INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (document_id) REFERENCES documents(id),
+            FOREIGN KEY (kb_id) REFERENCES knowledge_bases(id)
         )
         """
     )
@@ -69,6 +106,39 @@ def _row_to_kb(row: aiosqlite.Row) -> KnowledgeBase:
         document_count=row["document_count"],
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
+    )
+
+
+def _row_to_document(row: aiosqlite.Row) -> Document:
+    """Convert a database row to a Document model."""
+    return Document(
+        id=row["id"],
+        kb_id=row["kb_id"],
+        filename=row["filename"],
+        format=row["format"],
+        file_path=row["file_path"],
+        char_count=row["char_count"],
+        status=row["status"],
+        error_message=row["error_message"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+    )
+
+
+def _row_to_kp(row: aiosqlite.Row) -> KnowledgePoint:
+    """Convert a database row to a KnowledgePoint model."""
+    return KnowledgePoint(
+        id=row["id"],
+        document_id=row["document_id"],
+        kb_id=row["kb_id"],
+        name=row["name"],
+        description=row["description"],
+        tags_json=row["tags_json"],
+        confidence=row["confidence"],
+        method=row["method"],
+        chapter_id=row["chapter_id"],
+        source_line_start=row["source_line_start"],
+        source_line_end=row["source_line_end"],
+        created_at=datetime.fromisoformat(row["created_at"]),
     )
 
 
@@ -117,3 +187,161 @@ async def list_kbs() -> list[KnowledgeBase]:
     )
     rows = await cursor.fetchall()
     return [_row_to_kb(row) for row in rows]
+
+
+async def get_kb(kb_id: str) -> KnowledgeBase | None:
+    """Return a knowledge base by ID, or None if not found."""
+    conn = await get_db_conn()
+    cursor = await conn.execute(
+        "SELECT id, name, description, subject, grade_level, "
+        "document_count, created_at, updated_at "
+        "FROM knowledge_bases WHERE id = ?",
+        (kb_id,),
+    )
+    row = await cursor.fetchone()
+    return _row_to_kb(row) if row else None
+
+
+async def create_document(
+    kb_id: str,
+    filename: str,
+    fmt: str,
+    file_path: str,
+    char_count: int = 0,
+) -> Document:
+    """Insert a new document record and return it."""
+    now = datetime.now(UTC)
+    doc = Document(
+        id=uuid4().hex,
+        kb_id=kb_id,
+        filename=filename,
+        format=fmt,
+        file_path=file_path,
+        char_count=char_count,
+        status="uploaded",
+        created_at=now,
+    )
+    conn = await get_db_conn()
+    await conn.execute(
+        """
+        INSERT INTO documents
+            (id, kb_id, filename, format, file_path, char_count, status, error_message, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            doc.id,
+            doc.kb_id,
+            doc.filename,
+            doc.format,
+            doc.file_path,
+            doc.char_count,
+            doc.status,
+            doc.error_message,
+            doc.created_at.isoformat(),
+        ),
+    )
+    await conn.commit()
+    return doc
+
+
+async def list_documents(kb_id: str) -> list[Document]:
+    """Return all documents in a knowledge base ordered by creation time."""
+    conn = await get_db_conn()
+    cursor = await conn.execute(
+        "SELECT id, kb_id, filename, format, file_path, char_count, "
+        "status, error_message, created_at "
+        "FROM documents WHERE kb_id = ? ORDER BY created_at DESC",
+        (kb_id,),
+    )
+    rows = await cursor.fetchall()
+    return [_row_to_document(row) for row in rows]
+
+
+async def update_document_status(
+    doc_id: str, status: str, error_message: str | None = None
+) -> None:
+    """Update a document's processing status."""
+    conn = await get_db_conn()
+    await conn.execute(
+        "UPDATE documents SET status = ?, error_message = ? WHERE id = ?",
+        (status, error_message, doc_id),
+    )
+    await conn.commit()
+
+
+class KnowledgePointInput(TypedDict, total=False):
+    """Input dict for batch knowledge point creation."""
+
+    name: str
+    description: str
+    tags_json: str
+    confidence: float
+    method: str
+    chapter_id: str
+    source_line_start: int
+    source_line_end: int
+
+
+async def create_knowledge_points(
+    kb_id: str,
+    document_id: str,
+    points: list[KnowledgePointInput],
+) -> list[KnowledgePoint]:
+    """Batch-insert knowledge points and return them."""
+    conn = await get_db_conn()
+    now = datetime.now(UTC)
+    created: list[KnowledgePoint] = []
+    for pt in points:
+        chapter_id_val = pt.get("chapter_id")
+        kp = KnowledgePoint(
+            id=uuid4().hex,
+            document_id=document_id,
+            kb_id=kb_id,
+            name=pt["name"],
+            description=pt["description"],
+            tags_json=pt.get("tags_json", "[]"),
+            confidence=pt.get("confidence", 0.0),
+            method=pt.get("method", "unknown"),
+            chapter_id=chapter_id_val if chapter_id_val else None,
+            source_line_start=pt.get("source_line_start", 0),
+            source_line_end=pt.get("source_line_end", 0),
+            created_at=now,
+        )
+        await conn.execute(
+            """
+            INSERT INTO knowledge_points
+                (id, document_id, kb_id, name, description, tags_json,
+                 confidence, method, chapter_id, source_line_start, source_line_end, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                kp.id,
+                kp.document_id,
+                kp.kb_id,
+                kp.name,
+                kp.description,
+                kp.tags_json,
+                kp.confidence,
+                kp.method,
+                kp.chapter_id,
+                kp.source_line_start,
+                kp.source_line_end,
+                kp.created_at.isoformat(),
+            ),
+        )
+        created.append(kp)
+    await conn.commit()
+    return created
+
+
+async def list_kbs_knowledge_points(kb_id: str) -> list[KnowledgePoint]:
+    """Return all knowledge points in a knowledge base ordered by creation time."""
+    conn = await get_db_conn()
+    cursor = await conn.execute(
+        "SELECT id, document_id, kb_id, name, description, tags_json, "
+        "confidence, method, chapter_id, source_line_start, source_line_end, created_at "
+        "FROM knowledge_points WHERE kb_id = ? ORDER BY created_at",
+        (kb_id,),
+    )
+    rows = await cursor.fetchall()
+    return [_row_to_kp(row) for row in rows]
