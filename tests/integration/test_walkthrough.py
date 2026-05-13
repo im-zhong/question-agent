@@ -148,7 +148,7 @@ async def test_knowledge_bases_crud(client: httpx.AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_kb_document_upload_and_list(client: httpx.AsyncClient) -> None:
-    """POST /v1/knowledge-bases/{kb_id}/documents uploads a file and GET lists it (direct backend)."""
+    """POST .../documents uploads a file and GET lists it (direct backend)."""
     # Create a KB
     resp = await client.post(
         "/v1/knowledge-bases",
@@ -182,7 +182,7 @@ async def test_kb_document_upload_and_list(client: httpx.AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_kb_knowledge_points_list(client: httpx.AsyncClient) -> None:
-    """GET /v1/knowledge-bases/{kb_id}/knowledge-points returns KPs after upload (direct backend)."""
+    """GET .../knowledge-points returns KPs after upload (direct backend)."""
     # Create a KB and upload
     resp = await client.post(
         "/v1/knowledge-bases",

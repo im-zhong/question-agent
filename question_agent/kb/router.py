@@ -24,6 +24,7 @@ from question_agent.kb.database import (
     create_document,
     create_knowledge_points,
     get_kb,
+    increment_kb_document_count,
     list_documents,
     list_kbs_knowledge_points,
     update_document_status,
@@ -202,6 +203,7 @@ async def upload_document(
         file_path=str(file_path),
         char_count=char_count,
     )
+    await update_document_status(doc.id, "processing")
 
     try:
         windows, chapter_nodes = _build_windows(paragraphs_list, page_map)
@@ -246,6 +248,7 @@ async def upload_document(
         raise
 
     await update_document_status(doc.id, "ready")
+    await increment_kb_document_count(kb_id)
     updated_doc = Document(
         id=doc.id,
         kb_id=doc.kb_id,

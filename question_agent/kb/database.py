@@ -269,6 +269,17 @@ async def update_document_status(
     await conn.commit()
 
 
+async def increment_kb_document_count(kb_id: str) -> None:
+    """Increment the document_count of a knowledge base by 1."""
+    conn = await get_db_conn()
+    await conn.execute(
+        "UPDATE knowledge_bases SET document_count = document_count + 1, "
+        "updated_at = ? WHERE id = ?",
+        (datetime.now(UTC).isoformat(), kb_id),
+    )
+    await conn.commit()
+
+
 class KnowledgePointInput(TypedDict, total=False):
     """Input dict for batch knowledge point creation."""
 
