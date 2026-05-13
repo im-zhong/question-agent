@@ -5,19 +5,22 @@ from __future__ import annotations
 import json
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from question_agent.chat.tools import ALL_TOOLS, extract_knowledge_points, generate_questions
 
 
 class TestToolRegistration:
     """Verify tools are correctly registered."""
 
-    def test_all_tools_contains_both(self) -> None:
-        assert len(ALL_TOOLS) == 2
+    def test_all_tools_contains_three(self) -> None:
+        assert len(ALL_TOOLS) == 3
 
     def test_tool_names(self) -> None:
         names = [t.name for t in ALL_TOOLS]
         assert "extract_knowledge_points" in names
         assert "generate_questions" in names
+        assert "fetch_knowledge_points_from_kb" in names
 
     def test_tools_have_chinese_descriptions(self) -> None:
         for t in ALL_TOOLS:
@@ -118,10 +121,11 @@ class TestGenerateQuestions:
 class TestToolNodeInGraph:
     """Test that the graph includes a tools node."""
 
-    def test_graph_has_tools_node(self) -> None:
+    @pytest.mark.asyncio
+    async def test_graph_has_tools_node(self) -> None:
         from question_agent.chat.graph import create_chat_graph
 
-        graph = create_chat_graph()
+        graph = await create_chat_graph()
         assert "tools" in graph.nodes
 
     def test_llm_has_tools_bound(self) -> None:

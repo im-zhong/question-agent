@@ -291,6 +291,10 @@ async def ws_chat(
             if not content:
                 continue
 
+            kb_id = data.get("kb_id")
+            if kb_id:
+                content = f"[kb:{kb_id}] {content}"
+
             input_msg: MessagesState = {"messages": [HumanMessage(content=content)]}
             await websocket.send_json({"type": "start", "conversation_id": thread_id})
 
@@ -302,6 +306,7 @@ async def ws_chat(
                     elif isinstance(msg, ToolMessage) and msg.name in (
                         "extract_knowledge_points",
                         "generate_questions",
+                        "fetch_knowledge_points_from_kb",
                     ):
                         await websocket.send_json(
                             {"type": "data", "tool": msg.name, "content": msg.content}
