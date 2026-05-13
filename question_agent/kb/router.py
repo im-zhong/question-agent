@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import uuid
 from typing import Any
 
@@ -181,7 +182,8 @@ async def upload_document(
 
     save_dir = settings.kb_db_path.parent / kb_id
     save_dir.mkdir(parents=True, exist_ok=True)
-    safe_filename = f"{uuid.uuid4().hex}_{filename}"
+    safe_name = pathlib.PurePosixPath(filename).name
+    safe_filename = f"{uuid.uuid4().hex}_{safe_name}"
     file_path = save_dir / safe_filename
     file_path.write_bytes(content)
 

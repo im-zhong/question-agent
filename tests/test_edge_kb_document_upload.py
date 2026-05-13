@@ -131,23 +131,14 @@ class TestUploadSpecialFilename:
 
 
 class TestUploadPathTraversal:
-    async def test_upload_path_traversal_filename_crashes_server(self, client: AsyncClient) -> None:
-        """Path traversal in filename causes an unhandled error on the server.
-
-        The server does not sanitize the filename before constructing the
-        save path. When ``..`` segments are present, pathlib resolves them
-        and write_bytes raises FileNotFoundError because the intermediate
-        directories (e.g. ``../../../etc/``) do not exist. The ASGI
-        transport re-raises this as an unhandled exception.
-
-        Key invariant: no file is written outside the KB directory. The
-        crash itself prevents the write from succeeding.
-        """
+    async def test_upload_path_traversal_filename_saves_safely(self, client: AsyncClient) -> None:
+        """Path traversal in filename is sanitized — file saves in KB dir."""
         kb_id = await _create_kb(client)
         filename = "../../../etc/passwd.txt"
         files = {"file": (filename, BytesIO(b"secret"), "text/plain")}
-        with pytest.raises(FileNotFoundError):
-            await client.post(f"/v1/knowledge-bases/{kb_id}/documents", files=files)
+        resp = await client.post(f"/v1/knowledge-bases/{kb_id}/documents", files=files)
+        assert resp.status_code == 201
+        assert resp.json()["document"]["filename"] == filename
 
 
 class TestWrongHttpMethods:
