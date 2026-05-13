@@ -1,9 +1,18 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Database, Plus, Loader2, FolderOpen } from 'lucide-react';
+import {
+  Database,
+  Plus,
+  Loader2,
+  FolderOpen,
+  Upload,
+  FileText,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 
 const API_URL = '/api/v1';
 
@@ -21,6 +30,30 @@ interface KnowledgeBase {
   updated_at: string;
 }
 
+interface Document {
+  id: string;
+  kb_id: string;
+  filename: string;
+  format: string;
+  file_path: string;
+  char_count: number;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+}
+
+interface KnowledgePoint {
+  id: string;
+  document_id: string;
+  kb_id: string;
+  name: string;
+  description: string;
+  tags_json: string;
+  confidence: number;
+  method: string;
+  chapter_id: string | null;
+}
+
 export const Route = createFileRoute('/knowledge-bases')({
   component: KnowledgeBasesPage,
 });
@@ -35,6 +68,17 @@ function KnowledgeBasesPage() {
   const [subject, setSubject] = useState('');
   const [gradeLevel, setGradeLevel] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Expansion state
+  const [expandedKbId, setExpandedKbId] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [knowledgePoints, setKnowledgePoints] = useState<KnowledgePoint[]>([]);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [showKps, setShowKps] = useState(false);
+
+  // Upload state
+  const [uploadingKbId, setUploadingKbId] = useState<string | null>(null);
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   const fetchKbs = useCallback(async () => {
     try {
@@ -53,6 +97,75 @@ function KnowledgeBasesPage() {
   useEffect(() => {
     fetchKbs();
   }, [fetchKbs]);
+
+  const fetchDetails = useCallback(async (kbId: string) => {
+    setLoadingDetails(true);
+    try {
+      const [docsRes, kpsRes] = await Promise.all([
+        fetch(`${API_URL}/knowledge-bases/${kbId}/documents`),
+        fetch(`${API_URL}/knowledge-bases/${kbId}/knowledge-points`),
+      ]);
+      if (docsRes.ok) {
+        setDocuments(await docsRes.json());
+      }
+      if (kpsRes.ok) {
+        setKnowledgePoints(await kpsRes.json());
+      }
+    } catch {
+      // ignore fetch errors
+    } finally {
+      setLoadingDetails(false);
+    }
+  }, []);
+
+  const handleToggleExpand = useCallback((kbId: string) => {
+    if (expandedKbId === kbId) {
+      setExpandedKbId(null);
+      setDocuments([]);
+      setKnowledgePoints([]);
+      setShowKps(false);
+    } else {
+      setExpandedKbId(kbId);
+      setDocuments([]);
+      setKnowledgePoints([]);
+      setShowKps(false);
+      fetchDetails(kbId);
+    }
+  }, [expandedKbId, fetchDetails]);
+
+  const handleUpload = useCallback(async (kbId: string, file: File) => {
+    setUploadingKbId(kbId);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API_URL}/knowledge-bases/${kbId}/documents`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.detail ?? `上传失败 (${res.status})`);
+      }
+      await fetchKbs();
+      if (expandedKbId === kbId) {
+        await fetchDetails(kbId);
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-alert
+      alert(err instanceof Error ? err.message : '上传失败');
+    } finally {
+      setUploadingKbId(null);
+    }
+  }, [expandedKbId, fetchKbs, fetchDetails]);
+
+  const handleFileSelect = useCallback((kbId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleUpload(kbId, file);
+    }
+    // Reset input so re-uploading the same file triggers change
+    e.target.value = '';
+  }, [handleUpload]);
 
   const handleCreate = useCallback(async () => {
     if (!name.trim()) return;
@@ -85,6 +198,23 @@ function KnowledgeBasesPage() {
       setCreating(false);
     }
   }, [name, description, subject, gradeLevel, fetchKbs]);
+
+  const statusBadge = (status: string, errorMessage: string | null) => {
+    if (status === 'ready') {
+      return <Badge className="bg-green-100 text-green-700 text-xs hover:bg-green-100">就绪</Badge>;
+    }
+    if (status === 'failed') {
+      return (
+        <Badge
+          className="bg-red-100 text-red-700 text-xs hover:bg-red-100"
+          title={errorMessage ?? ''}
+        >
+          失败
+        </Badge>
+      );
+    }
+    return <Badge className="bg-yellow-100 text-yellow-700 text-xs hover:bg-yellow-100">处理中</Badge>;
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -173,25 +303,141 @@ function KnowledgeBasesPage() {
           <div className="space-y-3">
             {kbs.map((kb) => (
               <Card key={kb.id}>
-                <CardContent className="flex items-center justify-between py-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="truncate text-sm font-medium">{kb.name}</h3>
-                      {kb.subject && (
-                        <Badge variant="secondary" className="shrink-0 text-xs">{kb.subject}</Badge>
+                <CardContent className="py-3">
+                  <div className="flex items-center justify-between">
+                    <div
+                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-2"
+                      onClick={() => handleToggleExpand(kb.id)}
+                    >
+                      {expandedKbId === kb.id ? (
+                        <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                       )}
-                      {kb.grade_level && (
-                        <Badge variant="outline" className="shrink-0 text-xs">{kb.grade_level}</Badge>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="truncate text-sm font-medium">{kb.name}</h3>
+                          {kb.subject && (
+                            <Badge variant="secondary" className="shrink-0 text-xs">{kb.subject}</Badge>
+                          )}
+                          {kb.grade_level && (
+                            <Badge variant="outline" className="shrink-0 text-xs">{kb.grade_level}</Badge>
+                          )}
+                        </div>
+                        {kb.description && (
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">{kb.description}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <div className="text-right text-xs text-muted-foreground">
+                        <p>{kb.document_count} 个文档</p>
+                        <p>{new Date(kb.created_at).toLocaleDateString()}</p>
+                      </div>
+                      <input
+                        type="file"
+                        accept=".pdf,.docx,.txt"
+                        className="hidden"
+                        ref={(el) => { fileInputRefs.current[kb.id] = el; }}
+                        onChange={(e) => handleFileSelect(kb.id, e)}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs"
+                        disabled={uploadingKbId === kb.id}
+                        onClick={() => fileInputRefs.current[kb.id]?.click()}
+                      >
+                        {uploadingKbId === kb.id ? (
+                          <Loader2 className="mr-1 size-3 animate-spin" />
+                        ) : (
+                          <Upload className="mr-1 size-3" />
+                        )}
+                        上传
+                      </Button>
+                    </div>
+                  </div>
+
+                  {expandedKbId === kb.id && (
+                    <div className="mt-3 border-t border-border pt-3">
+                      {loadingDetails ? (
+                        <div className="flex items-center justify-center py-4 text-muted-foreground">
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                          加载详情...
+                        </div>
+                      ) : (
+                        <>
+                          {/* Documents section */}
+                          <div className="mb-3">
+                            <h4 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                              <FileText className="size-3.5" />
+                              文档 ({documents.length})
+                            </h4>
+                            {documents.length === 0 ? (
+                              <p className="text-xs text-muted-foreground/60">暂无文档</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {documents.map((doc) => (
+                                  <div
+                                    key={doc.id}
+                                    className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-1.5"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                                      <span className="truncate text-xs">{doc.filename}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      {statusBadge(doc.status, doc.error_message)}
+                                      <span className="text-xs text-muted-foreground">
+                                        {new Date(doc.created_at).toLocaleDateString()}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Knowledge Points section */}
+                          <div>
+                            <button
+                              type="button"
+                              className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+                              onClick={() => setShowKps(!showKps)}
+                            >
+                              {showKps ? (
+                                <ChevronDown className="size-3.5" />
+                              ) : (
+                                <ChevronRight className="size-3.5" />
+                              )}
+                              知识点
+                              <Badge variant="secondary" className="text-xs">{knowledgePoints.length}</Badge>
+                            </button>
+                            {showKps && (
+                              <div className="space-y-1.5">
+                                {knowledgePoints.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground/60">暂无知识点</p>
+                                ) : (
+                                  knowledgePoints.map((kp) => (
+                                    <div
+                                      key={kp.id}
+                                      className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-1.5"
+                                    >
+                                      <span className="truncate text-xs">{kp.name}</span>
+                                      <Badge variant="outline" className="shrink-0 text-xs">{kp.method}</Badge>
+                                      <span className="shrink-0 text-xs text-muted-foreground">
+                                        {(kp.confidence * 100).toFixed(0)}%
+                                      </span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
-                    {kb.description && (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{kb.description}</p>
-                    )}
-                  </div>
-                  <div className="shrink-0 text-right text-xs text-muted-foreground">
-                    <p>{kb.document_count} 个文档</p>
-                    <p>{new Date(kb.created_at).toLocaleDateString()}</p>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
