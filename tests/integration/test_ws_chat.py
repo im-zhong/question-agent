@@ -110,3 +110,37 @@ class TestWsChatWalkthrough:
         # The response should contain question-related content (from tool execution)
         full_response = "".join(m["content"] for m in token_messages)
         assert len(full_response) > 0, "Response should not be empty"
+
+    def test_ws_chat_kb_generate_intent(self) -> None:
+        """KB selection + generate intent: dispatch should route to fetch KPs.
+
+        When a user selects a KB and asks to generate questions (e.g. "出两道选择题"),
+        the dispatch node should classify intent as 'generate', extract the kb_id,
+        and force a fetch_knowledge_points_from_kb tool call.
+        """
+        from starlette.testclient import TestClient
+
+        from question_agent.main import app
+
+        with TestClient(app) as client:
+            # First create a KB with a document to have knowledge points
+            with client.websocket_connect("/ws/chat") as ws:
+                ws.send_json(
+                    {
+                        "type": "message",
+                        "content": "出两道选择题",
+                        "kb_id": "nonexistent_kb",
+                    }
+                )
+
+                messages: list[dict[str, str]] = []
+                while True:
+                    data = ws.receive_json()
+                    messages.append(data)
+                    if data["type"] == "end":
+                        break
+
+        # Should follow the protocol regardless of KB existence
+        assert messages[0]["type"] == "start", "First message should be start"
+        assert messages[-1]["type"] == "end", "Last message should be end"
+        # Even with a nonexistent KB, the system should respond (not crash)

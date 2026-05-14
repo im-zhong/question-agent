@@ -295,6 +295,13 @@ async def ws_chat(
             if kb_id:
                 content = f"[kb:{kb_id}] {content}"
 
+            logger.info(
+                "ws_chat: received msg content=%r kb_id=%s thread=%s",
+                content[:100],
+                kb_id,
+                thread_id,
+            )
+
             input_msg: MessagesState = {"messages": [HumanMessage(content=content)]}
             await websocket.send_json({"type": "start", "conversation_id": thread_id})
 
@@ -308,11 +315,16 @@ async def ws_chat(
                         "generate_questions",
                         "fetch_knowledge_points_from_kb",
                     ):
+                        logger.info(
+                            "ws_chat: tool data name=%s len=%d",
+                            msg.name,
+                            len(str(msg.content)),
+                        )
                         await websocket.send_json(
                             {"type": "data", "tool": msg.name, "content": msg.content}
                         )
             except Exception:
-                logger.warning("LLM streaming error", exc_info=True)
+                logger.warning("ws_chat: LLM streaming error thread=%s", thread_id, exc_info=True)
                 await websocket.send_json({"type": "error", "content": "AI 响应出错，请重试"})
 
             await websocket.send_json({"type": "end"})

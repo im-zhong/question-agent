@@ -67,12 +67,15 @@ async def fetch_knowledge_points_from_kb(kb_id: str) -> str:
     """
     from question_agent.kb import get_kb, list_kbs_knowledge_points
 
+    logger.info("fetch_knowledge_points_from_kb: kb_id=%s", kb_id)
     kb = await get_kb(kb_id)
     if kb is None:
+        logger.warning("fetch_knowledge_points_from_kb: KB %s not found", kb_id)
         return json.dumps({"error": f"知识库 {kb_id} 不存在"}, ensure_ascii=False)
 
     kps = await list_kbs_knowledge_points(kb_id)
     if not kps:
+        logger.warning("fetch_knowledge_points_from_kb: KB %s has no knowledge points", kb_id)
         return json.dumps({"error": "知识库中没有知识点，请先上传文档"}, ensure_ascii=False)
 
     result = []
@@ -86,6 +89,11 @@ async def fetch_knowledge_points_from_kb(kb_id: str) -> str:
                 "method": kp.method,
             }
         )
+    logger.info(
+        "fetch_knowledge_points_from_kb: returned %d KPs from KB %s",
+        len(result),
+        kb_id,
+    )
     return json.dumps(result, ensure_ascii=False)
 
 
@@ -99,15 +107,23 @@ def generate_questions(knowledge_points_json: str, question_type: str | None = N
     """
     from question_agent.questions.generator import _KpInput, generate_questions
 
+    logger.info(
+        "generate_questions tool: question_type=%s, json_len=%d",
+        question_type,
+        len(knowledge_points_json),
+    )
+
     try:
         kp_list = json.loads(knowledge_points_json)
     except json.JSONDecodeError:
+        logger.warning("generate_questions tool: invalid JSON input")
         return json.dumps({"error": "无效的 JSON 格式"}, ensure_ascii=False)
 
     inputs = [
         _KpInput(name=kp["name"], description=kp["description"], tags=kp.get("tags", []))
         for kp in kp_list
     ]
+    logger.info("generate_questions tool: %d knowledge points parsed", len(inputs))
 
     try:
         loop = asyncio.get_running_loop()
@@ -124,6 +140,12 @@ def generate_questions(knowledge_points_json: str, question_type: str | None = N
     else:
         questions, stats = asyncio.run(generate_questions(inputs, question_type=question_type))
 
+    logger.info(
+        "generate_questions tool: stats total=%d success=%d failed=%d",
+        stats.total,
+        stats.successful,
+        stats.failed,
+    )
     output = {
         "questions": [
             {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any, Literal
 
@@ -17,6 +18,8 @@ from pydantic import SecretStr
 from question_agent.chat.intent import classify_intent, detect_question_type
 from question_agent.chat.tools import ALL_TOOLS
 from question_agent.config import settings
+
+logger = logging.getLogger(__name__)
 
 _ZHIPU_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/"
 
@@ -57,20 +60,23 @@ async def dispatch_node(state: MessagesState) -> dict[str, list[BaseMessage]]:
             break
 
     if last_user_msg is None:
+        logger.debug("dispatch_node: no user message found")
         return {"messages": []}
 
-    content = str(last_user_msg.content)
+    raw_content = str(last_user_msg.content)
 
     # Parse kb_id prefix like [kb:abc123]
     kb_id: str | None = None
-    kb_match = _KB_PREFIX_RE.match(content)
+    kb_match = _KB_PREFIX_RE.match(raw_content)
     if kb_match:
         kb_id = kb_match.group(1)
-        content = _KB_PREFIX_RE.sub("", content)
+        raw_content = _KB_PREFIX_RE.sub("", raw_content)
 
-    intent = classify_intent(content)
+    intent = classify_intent(raw_content)
+    logger.info("dispatch_node: content=%r, kb_id=%s, intent=%s", raw_content, kb_id, intent)
 
     if intent == "chat":
+        logger.info("dispatch_node: routing to chat_node (no forced tool call)")
         return {"messages": []}
 
     # Force tool call by creating a synthetic AIMessage
@@ -78,25 +84,32 @@ async def dispatch_node(state: MessagesState) -> dict[str, list[BaseMessage]]:
 
     if intent == "extract":
         tool_name = _TOOL_NAME_MAP["extract"]
-        tool_args = {"text": content}
+        tool_args = {"text": raw_content}
     elif intent == "generate":
         # If kb_id is present, fetch KPs from KB instead of history
         if kb_id:
             tool_name = _TOOL_NAME_MAP["fetch_kb"]
             tool_args = {"kb_id": kb_id}
+            logger.info("dispatch_node: forcing fetch_knowledge_points_from_kb(kb_id=%s)", kb_id)
         else:
             # For generate without KB, check if KPs exist in prior messages
             kp_json = _extract_kp_from_history(list(state["messages"]))
             if kp_json is None:
+                logger.info("dispatch_node: generate intent but no prior KPs, asking for material")
                 hint = SystemMessage(
                     content="用户想要出题，但还没有提取知识点。请先询问用户是否需要提供教材内容来提取知识点。"
                 )
                 return {"messages": [hint]}
             tool_name = _TOOL_NAME_MAP["generate"]
             tool_args = {"knowledge_points_json": kp_json}
-            qtype = detect_question_type(content)
+            qtype = detect_question_type(raw_content)
             if qtype:
                 tool_args["question_type"] = qtype
+            logger.info(
+                "dispatch_node: forcing generate_questions(kp_count=%d, qtype=%s)",
+                len(json.loads(kp_json)),
+                qtype,
+            )
     else:
         return {"messages": []}
 
@@ -108,6 +121,11 @@ async def dispatch_node(state: MessagesState) -> dict[str, list[BaseMessage]]:
     }
     synthetic_ai = AIMessage(content="", tool_calls=[tool_call])
     extra_messages.append(synthetic_ai)
+    logger.info(
+        "dispatch_node: forced tool_call name=%s args_keys=%s",
+        tool_name,
+        list(tool_args.keys()),
+    )
     return {"messages": extra_messages}
 
 
@@ -146,7 +164,26 @@ def _route_after_dispatch(state: MessagesState) -> Literal["tools", "chat"]:
 async def chat_node(state: MessagesState) -> dict[str, list[BaseMessage]]:
     """Chat node: invoke GLM-5 with accumulated messages and return the response."""
     llm = _create_llm_with_tools()
+    msg_count = len(state["messages"])
+    logger.info("chat_node: invoking LLM with %d messages", msg_count)
+    for i, msg in enumerate(state["messages"]):
+        content_preview = str(msg.content)[:200] if msg.content else "(empty)"
+        tool_calls_info = ""
+        if isinstance(msg, AIMessage) and msg.tool_calls:
+            tool_calls_info = f" tool_calls={[tc['name'] for tc in msg.tool_calls]}"
+        logger.debug(
+            "chat_node: msg[%d] type=%s%s content=%.100s",
+            i,
+            type(msg).__name__,
+            tool_calls_info,
+            content_preview,
+        )
     response = await llm.ainvoke(state["messages"])
+    resp_preview = str(response.content)[:200] if response.content else "(empty)"
+    tc_info = ""
+    if isinstance(response, AIMessage) and response.tool_calls:
+        tc_info = f" tool_calls={[tc['name'] for tc in response.tool_calls]}"
+    logger.info("chat_node: LLM response%s content=%.100s", tc_info, resp_preview)
     return {"messages": [response]}
 
 
