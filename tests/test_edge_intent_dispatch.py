@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.graph import MessagesState
 
 from question_agent.chat.graph import dispatch_node
 from question_agent.chat.intent import classify_intent, detect_question_type
-from langgraph.graph import MessagesState
 
 
 class TestIntentClassificationEdgeCases:
@@ -85,9 +85,7 @@ class TestDispatchNodeEdgeCases:
     async def test_kb_prefix_with_invalid_hex_still_parsed(self) -> None:
         """Invalid hex in kb prefix still gets parsed by regex."""
         # The regex matches [a-f0-9]+ so 'gg' won't match
-        state: MessagesState = {
-            "messages": [HumanMessage(content="[kb:gg] 出两道选择题")]
-        }
+        state: MessagesState = {"messages": [HumanMessage(content="[kb:gg] 出两道选择题")]}
         result = await dispatch_node(state)
         # 'gg' doesn't match [a-f0-9], so no kb_id extracted
         # Intent is generate (选择题 keyword), but no KB -> goes to generate without KB
@@ -114,9 +112,7 @@ class TestDispatchNodeEdgeCases:
     async def test_multiple_kb_prefixes_uses_first(self) -> None:
         """Only the first [kb:...] prefix is parsed."""
         state: MessagesState = {
-            "messages": [
-                HumanMessage(content="[kb:aaa111] [kb:bbb222] 出两道选择题")
-            ]
+            "messages": [HumanMessage(content="[kb:aaa111] [kb:bbb222] 出两道选择题")]
         }
         result = await dispatch_node(state)
         ai_msg = result["messages"][0]
