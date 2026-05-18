@@ -23,7 +23,7 @@ updated: 2026-05-18
 | 9 | 2026-05-12 | dev-loop (知识点展示+题目预览+导出+主观题), summarize ✅ |
 | 10 | 2026-05-12 | pre-dev, progressive-plan, scaffold, dev-loop (知识库创建), run, summarize ✅ |
 | 11 | 2026-05-13 | pre-dev (增量更新) |
-| 12 | 2026-05-18 | run (知识库列表与删除) |
+| 12 | 2026-05-18 | run (知识库列表与删除) ✅ |
 
 ## 文档快照
 
