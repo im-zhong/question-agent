@@ -181,6 +181,24 @@ async def test_kb_document_upload_and_list(client: httpx.AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_kb_delete(client: httpx.AsyncClient) -> None:
+    """DELETE /v1/knowledge-bases/{id} removes a KB and its contents."""
+    resp = await client.post(
+        "/v1/knowledge-bases",
+        json={"name": "Delete Walkthrough KB"},
+    )
+    assert resp.status_code == 201
+    kb_id = resp.json()["id"]
+
+    resp = await client.delete(f"/v1/knowledge-bases/{kb_id}")
+    assert resp.status_code == 204
+
+    resp = await client.get("/v1/knowledge-bases")
+    kbs = resp.json()
+    assert all(kb["id"] != kb_id for kb in kbs)
+
+
+@pytest.mark.asyncio
 async def test_kb_knowledge_points_list(client: httpx.AsyncClient) -> None:
     """GET .../knowledge-points returns KPs after upload (direct backend)."""
     # Create a KB and upload

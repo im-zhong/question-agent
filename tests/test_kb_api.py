@@ -64,3 +64,15 @@ async def test_create_kb_location_header(client: AsyncClient) -> None:
     resp = await client.post("/v1/knowledge-bases", json={"name": "WithLocation"})
     assert "location" in resp.headers
     assert "/v1/knowledge-bases/" in resp.headers["location"]
+
+
+async def test_delete_kb_returns_204(client: AsyncClient) -> None:
+    create_resp = await client.post("/v1/knowledge-bases", json={"name": "ToDelete"})
+    kb_id = create_resp.json()["id"]
+    resp = await client.delete(f"/v1/knowledge-bases/{kb_id}")
+    assert resp.status_code == 204
+
+
+async def test_delete_nonexistent_kb_returns_404(client: AsyncClient) -> None:
+    resp = await client.delete("/v1/knowledge-bases/nonexistent")
+    assert resp.status_code == 404

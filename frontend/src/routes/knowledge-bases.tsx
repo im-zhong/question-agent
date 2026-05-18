@@ -12,6 +12,7 @@ import {
   FileText,
   ChevronDown,
   ChevronRight,
+  Trash2,
 } from 'lucide-react';
 
 const API_URL = '/api/v1';
@@ -199,6 +200,34 @@ function KnowledgeBasesPage() {
     }
   }, [name, description, subject, gradeLevel, fetchKbs]);
 
+  // Delete state
+  const [deletingKbId, setDeletingKbId] = useState<string | null>(null);
+
+  const handleDelete = useCallback(async (kbId: string, kbName: string) => {
+    // eslint-disable-next-line no-alert
+    if (!window.confirm(`确定要删除知识库「${kbName}」吗？该操作不可恢复。`)) return;
+    setDeletingKbId(kbId);
+    try {
+      const res = await fetch(`${API_URL}/knowledge-bases/${kbId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok && res.status !== 204) {
+        throw new Error(`删除失败 (${res.status})`);
+      }
+      if (expandedKbId === kbId) {
+        setExpandedKbId(null);
+        setDocuments([]);
+        setKnowledgePoints([]);
+        setShowKps(false);
+      }
+      await fetchKbs();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '删除失败');
+    } finally {
+      setDeletingKbId(null);
+    }
+  }, [expandedKbId, fetchKbs]);
+
   const statusBadge = (status: string, errorMessage: string | null) => {
     if (status === 'ready') {
       return <Badge className="bg-green-100 text-green-700 text-xs hover:bg-green-100">就绪</Badge>;
@@ -354,6 +383,19 @@ function KnowledgeBasesPage() {
                           <Upload className="mr-1 size-3" />
                         )}
                         上传
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                        disabled={deletingKbId === kb.id}
+                        onClick={() => handleDelete(kb.id, kb.name)}
+                      >
+                        {deletingKbId === kb.id ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-3" />
+                        )}
                       </Button>
                     </div>
                   </div>

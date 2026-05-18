@@ -1,9 +1,9 @@
 ---
-iteration: 11
-current_phase: pre-dev
-status: pre-dev
+iteration: 12
+current_phase: run
+status: run
 created: 2026-04-29
-updated: 2026-05-13
+updated: 2026-05-18
 ---
 
 # Project State — AI 智能出题智能体
@@ -23,6 +23,7 @@ updated: 2026-05-13
 | 9 | 2026-05-12 | dev-loop (知识点展示+题目预览+导出+主观题), summarize ✅ |
 | 10 | 2026-05-12 | pre-dev, progressive-plan, scaffold, dev-loop (知识库创建), run, summarize ✅ |
 | 11 | 2026-05-13 | pre-dev (增量更新) |
+| 12 | 2026-05-18 | run (知识库列表与删除) |
 
 ## 文档快照
 
@@ -51,3 +52,4 @@ updated: 2026-05-13
 | Summary (Iter 9) | [summaries/2026-05-12-summary-iter9.md](summaries/2026-05-12-summary-iter9.md) | ACTIVE |
 | Items | [items/2026-05-12-09-知识库创建.md](items/2026-05-12-09-知识库创建.md) | 完成 |
 | Summary (Iter 10) | [summaries/2026-05-12-summary-iter10.md](summaries/2026-05-12-summary-iter10.md) | ACTIVE |
+| Items | [items/2026-05-18-01-知识库列表与删除.md](items/2026-05-18-01-知识库列表与删除.md) | 完成 |

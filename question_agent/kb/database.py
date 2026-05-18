@@ -356,3 +356,32 @@ async def list_kbs_knowledge_points(kb_id: str) -> list[KnowledgePoint]:
     )
     rows = await cursor.fetchall()
     return [_row_to_kp(row) for row in rows]
+
+
+async def delete_kb(kb_id: str) -> bool:
+    """Delete a knowledge base and all its documents and knowledge points.
+
+    Also removes associated files on disk. Returns True if the KB existed
+    and was deleted, False if not found.
+    """
+    import shutil
+
+    from question_agent.config import settings
+
+    conn = await get_db_conn()
+    cursor = await conn.execute("SELECT id FROM knowledge_bases WHERE id = ?", (kb_id,))
+    if await cursor.fetchone() is None:
+        return False
+
+    # Cascade delete: knowledge_points → documents → knowledge_bases
+    await conn.execute("DELETE FROM knowledge_points WHERE kb_id = ?", (kb_id,))
+    await conn.execute("DELETE FROM documents WHERE kb_id = ?", (kb_id,))
+    await conn.execute("DELETE FROM knowledge_bases WHERE id = ?", (kb_id,))
+    await conn.commit()
+
+    # Remove files on disk
+    kb_dir = settings.kb_db_path.parent / kb_id
+    if kb_dir.is_dir():
+        shutil.rmtree(kb_dir, ignore_errors=True)
+
+    return True

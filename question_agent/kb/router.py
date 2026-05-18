@@ -19,7 +19,7 @@ from question_agent.extractors import (
     extract_pdf_structured,
     extract_text_structured,
 )
-from question_agent.kb import create_kb, list_kbs
+from question_agent.kb import create_kb, delete_kb, list_kbs
 from question_agent.kb.database import (
     KnowledgePointInput,
     create_document,
@@ -149,6 +149,18 @@ async def create_knowledge_base(
 async def list_knowledge_bases() -> list[KnowledgeBase]:
     """List all knowledge bases ordered by creation time descending."""
     return await list_kbs()
+
+
+@router.delete("/{kb_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_knowledge_base(kb_id: str) -> Response:
+    """Delete a knowledge base and all its documents and knowledge points."""
+    deleted = await delete_kb(kb_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge base not found",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{kb_id}/documents", status_code=201, response_model=DocumentUploadResponse)
