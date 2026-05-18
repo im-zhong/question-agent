@@ -17,3 +17,7 @@ harness/
 
 # Runtime data (SQLite databases)
 data/
+
+.claude/
+.zac/
+
