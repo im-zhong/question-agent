@@ -1,7 +1,7 @@
 ---
 iteration: 12
-current_phase: run
-status: run
+current_phase: pre-dev
+status: pre-dev
 created: 2026-04-29
 updated: 2026-05-18
 ---
@@ -23,15 +23,15 @@ updated: 2026-05-18
 | 9 | 2026-05-12 | dev-loop (知识点展示+题目预览+导出+主观题), summarize ✅ |
 | 10 | 2026-05-12 | pre-dev, progressive-plan, scaffold, dev-loop (知识库创建), run, summarize ✅ |
 | 11 | 2026-05-13 | pre-dev (增量更新) |
-| 12 | 2026-05-18 | run (知识库列表与删除) ✅ |
+| 12 | 2026-05-18 | pre-dev (增量更新) |
 
 ## 文档快照
 
 | 文档 | 路径 | 状态 |
 |------|------|------|
-| Spec | [specs/2026-04-29-ai-question-agent.md](specs/2026-04-29-ai-question-agent.md) | DRAFT (updated 2026-05-11) |
-| Roadmap | [plans/2026-04-29-ai-question-agent.md](plans/2026-04-29-ai-question-agent.md) | DRAFT (updated 2026-05-11) |
-| Toolchain | [.harness/ai-question-agent-toolchain.md](../../.harness/ai-question-agent-toolchain.md) | ACTIVE (updated 2026-05-11) |
+| Spec | [specs/2026-04-29-ai-question-agent.md](specs/2026-04-29-ai-question-agent.md) | DRAFT (updated 2026-05-18) |
+| Roadmap | [plans/2026-04-29-ai-question-agent.md](plans/2026-04-29-ai-question-agent.md) | DRAFT (updated 2026-05-18) |
+| Toolchain | [.harness/ai-question-agent-toolchain.md](../../.harness/ai-question-agent-toolchain.md) | ACTIVE (updated 2026-05-18) |
 | Items | [items/2026-04-29-01-多格式文本提取.md](items/2026-04-29-01-多格式文本提取.md) | 完成 |
 | Items | [items/2026-04-30-01-章节结构识别.md](items/2026-04-30-01-章节结构识别.md) | 完成 |
 | Items | [items/2026-05-01-01-知识点识别与标注.md](items/2026-05-01-01-知识点识别与标注.md) | 完成 |
@@ -51,5 +51,6 @@ updated: 2026-05-18
 | Summary (Iter 8) | [summaries/2026-05-12-summary-iter8.md](summaries/2026-05-12-summary-iter8.md) | ACTIVE |
 | Summary (Iter 9) | [summaries/2026-05-12-summary-iter9.md](summaries/2026-05-12-summary-iter9.md) | ACTIVE |
 | Items | [items/2026-05-12-09-知识库创建.md](items/2026-05-12-09-知识库创建.md) | 完成 |
+| Items | [items/2026-05-13-10-文档上传到知识库.md](items/2026-05-13-10-文档上传到知识库.md) | 完成 |
 | Summary (Iter 10) | [summaries/2026-05-12-summary-iter10.md](summaries/2026-05-12-summary-iter10.md) | ACTIVE |
 | Items | [items/2026-05-18-01-知识库列表与删除.md](items/2026-05-18-01-知识库列表与删除.md) | 完成 |
