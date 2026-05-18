@@ -1,24 +1,40 @@
 """Unit tests for question_agent.chat module."""
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from question_agent.chat import graph as chat_graph
 from question_agent.chat.graph import chat_node, create_chat_graph, get_checkpointer
 
+_TEST_DB = Path("/tmp/test_chat_graph.db")
 
-def test_create_chat_graph_returns_compiled() -> None:
+
+@pytest.fixture(autouse=True)
+def _reset_checkpointer() -> None:
+    """Reset the checkpointer singleton between tests."""
+    chat_graph._checkpointer = None
+
+
+@pytest.mark.asyncio
+async def test_create_chat_graph_returns_compiled() -> None:
     """create_chat_graph returns a compiled graph with chat node."""
-    graph = create_chat_graph()
+    with patch.object(chat_graph.settings, "chat_db_path", _TEST_DB):
+        graph = await create_chat_graph()
     assert "chat" in graph.nodes
 
 
-def test_get_checkpointer_returns_singleton() -> None:
-    """get_checkpointer returns the same MemorySaver instance."""
-    cp1 = get_checkpointer()
-    cp2 = get_checkpointer()
+@pytest.mark.asyncio
+async def test_get_checkpointer_returns_singleton() -> None:
+    """get_checkpointer returns the same AsyncSqliteSaver instance."""
+    with patch.object(chat_graph.settings, "chat_db_path", _TEST_DB):
+        cp1 = await get_checkpointer()
+        cp2 = await get_checkpointer()
     assert cp1 is cp2
+    assert isinstance(cp1, AsyncSqliteSaver)
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Download } from 'lucide-react';
 
 const API_URL = '/api';
 
@@ -41,6 +42,10 @@ interface Question {
   id: number;
   stem_text: string;
   options: QuestionOption[];
+  correct_answer?: string | null;
+  reference_answer?: string | null;
+  explanation?: string | null;
+  difficulty?: string;
   knowledge_point_name: string;
   question_type: string;
   status: string;
@@ -363,6 +368,10 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   analysis: '分析',
   verification: '验证',
   application: '应用',
+  procedure: '过程',
+  recall: '回忆',
+  short_answer: '简答',
+  essay: '论述',
 };
 
 const QUESTION_TYPE_COLORS: Record<string, string> = {
@@ -371,6 +380,22 @@ const QUESTION_TYPE_COLORS: Record<string, string> = {
   analysis: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
   verification: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
   application: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+  procedure: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+  recall: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+  short_answer: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
+  essay: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
+};
+
+const DIFFICULTY_LABELS: Record<string, string> = {
+  basic: '基础',
+  intermediate: '中等',
+  advanced: '提高',
+};
+
+const DIFFICULTY_COLORS: Record<string, string> = {
+  basic: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
+  intermediate: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+  advanced: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200',
 };
 
 function EmptyState({ message }: { message: string }) {
@@ -395,13 +420,41 @@ function StructuredResult({
   const hasSuccess = questions.some((q) => q.status === 'success');
   const hasFailed = questions.some((q) => q.status === 'failed');
 
+  const handleExport = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/questions/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questions, format: 'markdown' }),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'questions.md';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // silently fail
+    }
+  }, [questions]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">生成结果</h2>
-        <Button variant="outline" size="sm" onClick={onReset}>
-          重新上传
-        </Button>
+        <div className="flex items-center gap-2">
+          {hasSuccess && (
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="mr-1 size-4" />
+              导出 Markdown
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={onReset}>
+            重新上传
+          </Button>
+        </div>
       </div>
 
       <StatsCard stats={generation_stats} />
@@ -587,30 +640,77 @@ function QuestionsSection({ questions }: { questions: Question[] }) {
 }
 
 function QuestionCard({ question, index }: { question: Question; index: number }) {
+  const correctLabel = question.correct_answer;
+  const isSubjective = question.question_type === 'short_answer' || question.question_type === 'essay';
+
   return (
     <div className="rounded-lg border p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <h4 className="text-sm font-medium text-foreground break-words">
           {index}. {question.stem_text}
         </h4>
-        <Badge
-          variant="secondary"
-          className={`shrink-0 ${QUESTION_TYPE_COLORS[question.question_type] ?? ''}`}
-        >
-          {QUESTION_TYPE_LABELS[question.question_type] ?? question.question_type}
-        </Badge>
+        <div className="flex shrink-0 flex-wrap gap-1">
+          <Badge
+            variant="secondary"
+            className={`text-xs ${QUESTION_TYPE_COLORS[question.question_type] ?? ''}`}
+          >
+            {QUESTION_TYPE_LABELS[question.question_type] ?? question.question_type}
+          </Badge>
+          {question.difficulty && (
+            <Badge
+              variant="secondary"
+              className={`text-xs ${DIFFICULTY_COLORS[question.difficulty] ?? ''}`}
+            >
+              {DIFFICULTY_LABELS[question.difficulty] ?? question.difficulty}
+            </Badge>
+          )}
+        </div>
       </div>
 
-      <div className="mt-3 space-y-1.5">
-        {question.options.map((opt) => (
-          <div key={opt.label} className="flex items-start gap-2 text-sm">
-            <span className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-              {opt.label}
-            </span>
-            <span className="text-foreground break-words">{opt.text}</span>
-          </div>
-        ))}
-      </div>
+      {!isSubjective && question.options.length > 0 && (
+        <div className="mt-3 space-y-1.5">
+          {question.options.map((opt) => {
+            const isCorrect = correctLabel && opt.label === correctLabel;
+            return (
+              <div
+                key={opt.label}
+                className={`flex items-start gap-2 text-sm ${
+                  isCorrect ? 'font-medium text-green-700 dark:text-green-400' : ''
+                }`}
+              >
+                <span
+                  className={`inline-flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-medium ${
+                    isCorrect
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                      : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  {isCorrect ? '✓' : opt.label}
+                </span>
+                <span className="text-foreground break-words">{opt.text}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {isSubjective && question.reference_answer && (
+        <div className="mt-3 rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-2.5">
+          <div className="mb-1 text-xs font-medium text-muted-foreground">参考答案</div>
+          <p className="text-sm text-foreground break-words whitespace-pre-wrap">
+            {question.reference_answer}
+          </p>
+        </div>
+      )}
+
+      {question.explanation && (
+        <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-2.5 dark:border-blue-800 dark:bg-blue-950">
+          <div className="mb-1 text-xs font-medium text-blue-600 dark:text-blue-400">解析</div>
+          <p className="text-sm text-foreground break-words whitespace-pre-wrap">
+            {question.explanation}
+          </p>
+        </div>
+      )}
 
       <div className="mt-3 text-xs text-muted-foreground break-words">
         知识点: {question.knowledge_point_name}

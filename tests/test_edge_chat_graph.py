@@ -3,12 +3,23 @@
 Covers: empty messages, missing API key, singleton concurrency, graph structure.
 """
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
+from question_agent.chat import graph as chat_graph
 from question_agent.chat.graph import chat_node, create_chat_graph, get_checkpointer
+
+_TEST_DB = Path("/tmp/test_edge_chat_graph.db")
+
+
+@pytest.fixture(autouse=True)
+def _reset_checkpointer() -> None:
+    """Reset the checkpointer singleton between tests."""
+    chat_graph._checkpointer = None
 
 
 class TestChatNodeEdgeCases:
@@ -81,16 +92,18 @@ class TestChatNodeEdgeCases:
 class TestCreateChatGraphEdgeCases:
     """Edge cases for create_chat_graph."""
 
-    def test_multiple_compilations_produce_valid_graphs(self) -> None:
+    @pytest.mark.asyncio
+    async def test_multiple_compilations_produce_valid_graphs(self) -> None:
         """Calling create_chat_graph multiple times returns valid graphs."""
-        g1 = create_chat_graph()
-        g2 = create_chat_graph()
+        g1 = await create_chat_graph()
+        g2 = await create_chat_graph()
         assert "chat" in g1.nodes
         assert "chat" in g2.nodes
 
-    def test_graph_has_correct_edges(self) -> None:
+    @pytest.mark.asyncio
+    async def test_graph_has_correct_edges(self) -> None:
         """Compiled graph has START->chat->END structure."""
-        graph = create_chat_graph()
+        graph = await create_chat_graph()
         # Verify the graph can be invoked with a valid config
         assert hasattr(graph, "invoke")
         assert hasattr(graph, "astream")
@@ -99,16 +112,18 @@ class TestCreateChatGraphEdgeCases:
 class TestGetCheckpointerEdgeCases:
     """Edge cases for get_checkpointer singleton."""
 
-    def test_checkpointer_is_memory_saver(self) -> None:
-        """get_checkpointer returns a MemorySaver instance."""
-        from langgraph.checkpoint.memory import MemorySaver
+    @pytest.mark.asyncio
+    async def test_checkpointer_is_async_sqlite_saver(self) -> None:
+        """get_checkpointer returns an AsyncSqliteSaver instance."""
+        with patch.object(chat_graph.settings, "chat_db_path", _TEST_DB):
+            cp = await get_checkpointer()
+        assert isinstance(cp, AsyncSqliteSaver)
 
-        cp = get_checkpointer()
-        assert isinstance(cp, MemorySaver)
-
-    def test_checkpointer_stores_and_retrieves(self) -> None:
-        """MemorySaver can store and retrieve a checkpoint."""
-        cp = get_checkpointer()
+    @pytest.mark.asyncio
+    async def test_checkpointer_stores_and_retrieves(self) -> None:
+        """AsyncSqliteSaver can store and retrieve a checkpoint."""
+        with patch.object(chat_graph.settings, "chat_db_path", _TEST_DB):
+            cp = await get_checkpointer()
         assert cp is not None
 
 

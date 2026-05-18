@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from langchain_core.messages import AIMessageChunk
 from starlette.testclient import TestClient
@@ -24,6 +24,7 @@ def _make_mock_graph(*chunks: str) -> MagicMock:
 
     graph = MagicMock()
     graph.astream = mock_astream
+    graph.aget_state = AsyncMock(return_value=None)
     return graph
 
 
@@ -51,7 +52,7 @@ class TestWsStreamingEdgeCases:
         mock_graph = _make_mock_graph("你好 🎉", "中日韓", "\U0001f600")
 
         with (
-            patch("question_agent.main.create_chat_graph", return_value=mock_graph),
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
             TestClient(app) as client,
         ):
             with client.websocket_connect("/ws/chat") as ws:
@@ -72,7 +73,7 @@ class TestWsStreamingEdgeCases:
         mock_graph = _make_mock_graph(long_content)
 
         with (
-            patch("question_agent.main.create_chat_graph", return_value=mock_graph),
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
             TestClient(app) as client,
         ):
             with client.websocket_connect("/ws/chat") as ws:
@@ -92,7 +93,7 @@ class TestWsStreamingEdgeCases:
         mock_graph = _make_mock_graph("回复")
 
         with (
-            patch("question_agent.main.create_chat_graph", return_value=mock_graph),
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
             TestClient(app) as client,
         ):
             with client.websocket_connect("/ws/chat") as ws:
@@ -114,7 +115,7 @@ class TestWsStreamingEdgeCases:
         mock_graph = _make_mock_graph("回复")
 
         with (
-            patch("question_agent.main.create_chat_graph", return_value=mock_graph),
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
             TestClient(app) as client,
         ):
             with client.websocket_connect("/ws/chat") as ws:
@@ -147,7 +148,7 @@ class TestWsStreamingEdgeCases:
         mock_graph.astream = mock_astream_count
 
         with (
-            patch("question_agent.main.create_chat_graph", return_value=mock_graph),
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
             TestClient(app) as client,
         ):
             with client.websocket_connect("/ws/chat") as ws:
@@ -166,7 +167,7 @@ class TestWsStreamingEdgeCases:
         mock_graph = _make_error_graph()
 
         with (
-            patch("question_agent.main.create_chat_graph", return_value=mock_graph),
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
             TestClient(app) as client,
         ):
             with client.websocket_connect("/ws/chat") as ws:

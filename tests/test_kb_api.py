@@ -19,7 +19,7 @@ async def client(tmp_path, monkeypatch) -> AsyncClient:
 
 
 async def test_create_kb_returns_201(client: AsyncClient) -> None:
-    resp = await client.post("/api/v1/knowledge-bases", json={"name": "数学知识库"})
+    resp = await client.post("/v1/knowledge-bases", json={"name": "数学知识库"})
     assert resp.status_code == 201
     data = resp.json()
     assert data["name"] == "数学知识库"
@@ -28,13 +28,13 @@ async def test_create_kb_returns_201(client: AsyncClient) -> None:
 
 
 async def test_create_kb_empty_name_returns_422(client: AsyncClient) -> None:
-    resp = await client.post("/api/v1/knowledge-bases", json={"name": ""})
+    resp = await client.post("/v1/knowledge-bases", json={"name": ""})
     assert resp.status_code == 422
 
 
 async def test_create_kb_with_optional_fields(client: AsyncClient) -> None:
     resp = await client.post(
-        "/api/v1/knowledge-bases",
+        "/v1/knowledge-bases",
         json={"name": "物理", "description": "高中物理", "subject": "物理", "grade_level": "高中"},
     )
     assert resp.status_code == 201
@@ -44,8 +44,8 @@ async def test_create_kb_with_optional_fields(client: AsyncClient) -> None:
 
 
 async def test_list_kbs_returns_list(client: AsyncClient) -> None:
-    await client.post("/api/v1/knowledge-bases", json={"name": "KB1"})
-    resp = await client.get("/api/v1/knowledge-bases")
+    await client.post("/v1/knowledge-bases", json={"name": "KB1"})
+    resp = await client.get("/v1/knowledge-bases")
     assert resp.status_code == 200
     data = resp.json()
     assert isinstance(data, list)
@@ -53,14 +53,14 @@ async def test_list_kbs_returns_list(client: AsyncClient) -> None:
 
 
 async def test_list_kbs_ordered_by_created_desc(client: AsyncClient) -> None:
-    await client.post("/api/v1/knowledge-bases", json={"name": "First"})
-    await client.post("/api/v1/knowledge-bases", json={"name": "Second"})
-    resp = await client.get("/api/v1/knowledge-bases")
+    await client.post("/v1/knowledge-bases", json={"name": "First"})
+    await client.post("/v1/knowledge-bases", json={"name": "Second"})
+    resp = await client.get("/v1/knowledge-bases")
     data = resp.json()
     assert data[0]["name"] == "Second"
 
 
 async def test_create_kb_location_header(client: AsyncClient) -> None:
-    resp = await client.post("/api/v1/knowledge-bases", json={"name": "WithLocation"})
+    resp = await client.post("/v1/knowledge-bases", json={"name": "WithLocation"})
     assert "location" in resp.headers
-    assert "/api/v1/knowledge-bases/" in resp.headers["location"]
+    assert "/v1/knowledge-bases/" in resp.headers["location"]

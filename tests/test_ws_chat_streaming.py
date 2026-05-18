@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import uuid
+import json
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import AIMessageChunk, ToolMessage
 from starlette.testclient import TestClient
 
 from question_agent.main import app
@@ -25,6 +25,7 @@ def _make_mock_graph(*chunks: str) -> MagicMock:
 
     graph = MagicMock()
     graph.astream = mock_astream
+    graph.aget_state = AsyncMock(return_value=None)
     return graph
 
 
@@ -36,7 +37,7 @@ class TestWsChatStreaming:
         mock_graph = _make_mock_graph("你", "好", "！")
 
         with (
-            patch("question_agent.main.create_chat_graph", return_value=mock_graph),
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
             TestClient(app) as client,
         ):
             with client.websocket_connect("/ws/chat") as ws:
@@ -48,7 +49,8 @@ class TestWsChatStreaming:
                     if data["type"] == "end":
                         break
 
-        assert messages[0] == {"type": "start"}
+        assert messages[0]["type"] == "start"
+        assert "conversation_id" in messages[0]
         assert messages[1] == {"type": "token", "content": "你"}
         assert messages[2] == {"type": "token", "content": "好"}
         assert messages[3] == {"type": "token", "content": "！"}
@@ -59,7 +61,7 @@ class TestWsChatStreaming:
         mock_graph = _make_mock_graph("回复")
 
         with (
-            patch("question_agent.main.create_chat_graph", return_value=mock_graph),
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
             TestClient(app) as client,
         ):
             with client.websocket_connect("/ws/chat") as ws:
@@ -74,7 +76,7 @@ class TestWsChatStreaming:
                         break
 
         # Should only get response for the second message
-        assert messages[0] == {"type": "start"}
+        assert messages[0]["type"] == "start"
         assert messages[-1] == {"type": "end"}
 
     def test_ignores_empty_content(self) -> None:
@@ -82,7 +84,7 @@ class TestWsChatStreaming:
         mock_graph = _make_mock_graph("回复")
 
         with (
-            patch("question_agent.main.create_chat_graph", return_value=mock_graph),
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
             TestClient(app) as client,
         ):
             with client.websocket_connect("/ws/chat") as ws:
@@ -102,21 +104,13 @@ class TestWsChatStreaming:
         assert end_count == 1
 
     def test_unique_thread_id_per_connection(self) -> None:
-        """Each WS connection gets a unique thread_id."""
-        thread_ids: list[str] = []
-
-        original_uuid4 = uuid.uuid4
-
-        def mock_uuid4() -> uuid.UUID:
-            uid = original_uuid4()
-            thread_ids.append(str(uid))
-            return uid
+        """Each WS connection gets a unique thread_id when no conversation_id provided."""
+        conversation_ids: list[str] = []
 
         mock_graph = _make_mock_graph("回复")
 
         with (
-            patch("question_agent.main.create_chat_graph", return_value=mock_graph),
-            patch("question_agent.main.uuid.uuid4", side_effect=mock_uuid4),
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
             TestClient(app) as client,
         ):
             # First connection
@@ -124,6 +118,8 @@ class TestWsChatStreaming:
                 ws.send_json({"type": "message", "content": "你好1"})
                 while True:
                     data = ws.receive_json()
+                    if data["type"] == "start":
+                        conversation_ids.append(data["conversation_id"])
                     if data["type"] == "end":
                         break
 
@@ -132,11 +128,30 @@ class TestWsChatStreaming:
                 ws.send_json({"type": "message", "content": "你好2"})
                 while True:
                     data = ws.receive_json()
+                    if data["type"] == "start":
+                        conversation_ids.append(data["conversation_id"])
                     if data["type"] == "end":
                         break
 
-        assert len(thread_ids) == 2
-        assert thread_ids[0] != thread_ids[1]
+        assert len(conversation_ids) == 2
+        assert conversation_ids[0] != conversation_ids[1]
+
+    def test_conversation_id_param_reuses_thread(self) -> None:
+        """WS with conversation_id query param uses it as thread_id."""
+        mock_graph = _make_mock_graph("回复")
+
+        with (
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
+            TestClient(app) as client,
+        ):
+            with client.websocket_connect("/ws/chat?conversation_id=test-conv-123") as ws:
+                ws.send_json({"type": "message", "content": "你好"})
+                while True:
+                    data = ws.receive_json()
+                    if data["type"] == "start":
+                        assert data["conversation_id"] == "test-conv-123"
+                    if data["type"] == "end":
+                        break
 
     def test_multiple_messages_in_same_session(self) -> None:
         """Multiple messages in one WS connection use the same graph (thread continuity)."""
@@ -155,7 +170,7 @@ class TestWsChatStreaming:
         mock_graph.astream = mock_astream_count
 
         with (
-            patch("question_agent.main.create_chat_graph", return_value=mock_graph),
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
             TestClient(app) as client,
         ):
             with client.websocket_connect("/ws/chat") as ws:
@@ -172,3 +187,138 @@ class TestWsChatStreaming:
                         break
 
         assert call_count == 2
+
+    def test_sends_data_for_extract_tool_message(self) -> None:
+        """WS sends type=data when a ToolMessage from extract_knowledge_points is received."""
+        kp_content = json.dumps(
+            [
+                {
+                    "name": "加速度",
+                    "description": "速度变化率",
+                    "tags": [{"value": "加速度", "category": "concept"}],
+                }
+            ]
+        )
+
+        async def mock_astream_with_tool(
+            input_msg: dict[str, Any],
+            config: dict[str, Any],
+            stream_mode: str = "messages",
+        ) -> Any:
+            tool_msg = ToolMessage(
+                content=kp_content,
+                name="extract_knowledge_points",
+                tool_call_id="forced_extract",
+            )
+            yield (tool_msg, {})
+            yield (AIMessageChunk(content="已提取知识点"), {})
+
+        mock_graph = MagicMock()
+        mock_graph.astream = mock_astream_with_tool
+
+        with (
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
+            TestClient(app) as client,
+        ):
+            with client.websocket_connect("/ws/chat") as ws:
+                ws.send_json({"type": "message", "content": "提取知识点"})
+                messages = []
+                while True:
+                    data = ws.receive_json()
+                    messages.append(data)
+                    if data["type"] == "end":
+                        break
+
+        data_msgs = [m for m in messages if m["type"] == "data"]
+        assert len(data_msgs) == 1
+        assert data_msgs[0]["tool"] == "extract_knowledge_points"
+        assert json.loads(data_msgs[0]["content"])[0]["name"] == "加速度"
+
+    def test_sends_data_for_generate_tool_message(self) -> None:
+        """WS sends type=data when a ToolMessage from generate_questions is received."""
+        q_content = json.dumps(
+            {
+                "questions": [
+                    {
+                        "id": 1,
+                        "stem_text": "什么是加速度？",
+                        "options": [{"label": "A", "text": "速度变化率"}],
+                        "correct_answer": "A",
+                        "knowledge_point_name": "加速度",
+                        "question_type": "definition",
+                        "status": "success",
+                    }
+                ],
+                "stats": {"total": 1, "successful": 1, "failed": 0},
+            }
+        )
+
+        async def mock_astream_with_tool(
+            input_msg: dict[str, Any],
+            config: dict[str, Any],
+            stream_mode: str = "messages",
+        ) -> Any:
+            tool_msg = ToolMessage(
+                content=q_content,
+                name="generate_questions",
+                tool_call_id="forced_generate",
+            )
+            yield (tool_msg, {})
+            yield (AIMessageChunk(content="已生成题目"), {})
+
+        mock_graph = MagicMock()
+        mock_graph.astream = mock_astream_with_tool
+
+        with (
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
+            TestClient(app) as client,
+        ):
+            with client.websocket_connect("/ws/chat") as ws:
+                ws.send_json({"type": "message", "content": "出题"})
+                messages = []
+                while True:
+                    data = ws.receive_json()
+                    messages.append(data)
+                    if data["type"] == "end":
+                        break
+
+        data_msgs = [m for m in messages if m["type"] == "data"]
+        assert len(data_msgs) == 1
+        assert data_msgs[0]["tool"] == "generate_questions"
+        parsed = json.loads(data_msgs[0]["content"])
+        assert parsed["questions"][0]["stem_text"] == "什么是加速度？"
+
+    def test_ignores_unknown_tool_messages(self) -> None:
+        """WS does not send data for ToolMessage from unknown tools."""
+
+        async def mock_astream_with_unknown_tool(
+            input_msg: dict[str, Any],
+            config: dict[str, Any],
+            stream_mode: str = "messages",
+        ) -> Any:
+            tool_msg = ToolMessage(
+                content="some result",
+                name="unknown_tool",
+                tool_call_id="call_1",
+            )
+            yield (tool_msg, {})
+            yield (AIMessageChunk(content="回复"), {})
+
+        mock_graph = MagicMock()
+        mock_graph.astream = mock_astream_with_unknown_tool
+
+        with (
+            patch("question_agent.main.create_chat_graph", new=AsyncMock(return_value=mock_graph)),
+            TestClient(app) as client,
+        ):
+            with client.websocket_connect("/ws/chat") as ws:
+                ws.send_json({"type": "message", "content": "你好"})
+                messages = []
+                while True:
+                    data = ws.receive_json()
+                    messages.append(data)
+                    if data["type"] == "end":
+                        break
+
+        data_msgs = [m for m in messages if m["type"] == "data"]
+        assert len(data_msgs) == 0

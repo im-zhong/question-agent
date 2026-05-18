@@ -65,26 +65,30 @@ class TestShouldContinue:
 class TestReActGraphStructure:
     """Tests for the compiled graph structure with ReAct routing."""
 
-    def test_graph_has_tools_node(self) -> None:
+    @pytest.mark.asyncio
+    async def test_graph_has_tools_node(self) -> None:
         """Compiled graph contains a tools node."""
-        graph = create_chat_graph()
+        graph = await create_chat_graph()
         assert "tools" in graph.nodes
 
-    def test_graph_has_chat_node(self) -> None:
+    @pytest.mark.asyncio
+    async def test_graph_has_chat_node(self) -> None:
         """Compiled graph contains a chat node."""
-        graph = create_chat_graph()
+        graph = await create_chat_graph()
         assert "chat" in graph.nodes
 
-    def test_graph_compiles_successfully(self) -> None:
+    @pytest.mark.asyncio
+    async def test_graph_compiles_successfully(self) -> None:
         """Graph with conditional edges compiles without error."""
-        graph = create_chat_graph()
+        graph = await create_chat_graph()
         assert hasattr(graph, "invoke")
         assert hasattr(graph, "astream")
 
-    def test_graph_multiple_compilations(self) -> None:
+    @pytest.mark.asyncio
+    async def test_graph_multiple_compilations(self) -> None:
         """Multiple compilations produce valid graphs."""
-        g1 = create_chat_graph()
-        g2 = create_chat_graph()
+        g1 = await create_chat_graph()
+        g2 = await create_chat_graph()
         assert "chat" in g1.nodes and "tools" in g1.nodes
         assert "chat" in g2.nodes and "tools" in g2.nodes
 

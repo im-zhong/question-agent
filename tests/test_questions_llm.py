@@ -285,7 +285,8 @@ class TestCategoryAwareLlmGeneration:
         # Verify the system prompt used was the concept one
         call_args = mock_client.chat.completions.create.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
-        assert messages[0]["content"] == PROMPT_REGISTRY["concept"]
+        assert messages[0]["content"].startswith(PROMPT_REGISTRY["concept"])
+        assert "INTERMEDIATE" in messages[0]["content"]
 
     def test_formula_uses_formula_prompt(self) -> None:
         mock_response = MagicMock()
@@ -314,7 +315,68 @@ class TestCategoryAwareLlmGeneration:
         assert result.question_type == "calculation"
         call_args = mock_client.chat.completions.create.call_args
         messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
-        assert messages[0]["content"] == PROMPT_REGISTRY["formula"]
+        assert messages[0]["content"].startswith(PROMPT_REGISTRY["formula"])
+        assert "INTERMEDIATE" in messages[0]["content"]
+
+    def test_basic_difficulty_appended(self) -> None:
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "stem_text": "什么是力？",
+                "options": [
+                    {"label": "A", "text": "物体间的相互作用"},
+                    {"label": "B", "text": "物体的质量"},
+                    {"label": "C", "text": "物体的速度"},
+                    {"label": "D", "text": "物体的加速度"},
+                ],
+            }
+        )
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+
+        result = generate_question_llm(
+            name="力",
+            description="力是物体间的相互作用",
+            tags=[{"value": "力", "category": "concept"}],
+            difficulty="basic",
+            client=mock_client,
+        )
+        assert result is not None
+        assert result.difficulty == "basic"
+        call_args = mock_client.chat.completions.create.call_args
+        messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
+        assert "BASIC" in messages[0]["content"]
+
+    def test_advanced_difficulty_appended(self) -> None:
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = json.dumps(
+            {
+                "stem_text": "分析非惯性系中的力学问题",
+                "options": [
+                    {"label": "A", "text": "需要引入惯性力"},
+                    {"label": "B", "text": "直接用牛顿定律"},
+                    {"label": "C", "text": "不需要考虑参考系"},
+                    {"label": "D", "text": "仅适用静力学"},
+                ],
+            }
+        )
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+
+        result = generate_question_llm(
+            name="非惯性系",
+            description="非惯性系中的力学分析",
+            tags=[{"value": "非惯性系", "category": "principle"}],
+            difficulty="advanced",
+            client=mock_client,
+        )
+        assert result is not None
+        assert result.difficulty == "advanced"
+        call_args = mock_client.chat.completions.create.call_args
+        messages = call_args.kwargs.get("messages") or call_args[1].get("messages")
+        assert "ADVANCED" in messages[0]["content"]
 
 
 class TestLiveApi:

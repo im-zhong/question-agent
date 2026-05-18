@@ -1,7 +1,7 @@
 # AI 智能出题智能体 — Toolchain
 
 **Created:** 2026-04-29
-**Last updated:** 2026-05-11
+**Last updated:** 2026-05-13
 **Status:** ACTIVE
 
 ## Phase 1 技术栈 (当前)
@@ -9,9 +9,11 @@
 | 技术 | 支撑功能 | 选型理由 |
 |------|---------|---------|
 | zai-sdk (GLM-5) | 知识点识别与标注、能力目标识别、常错点挖掘、基于知识点生成题干、正确答案生成、难度等级控制、干扰项逻辑建模（概念混淆/计算错误/推理偏差）、答案解析生成、知识点匹配度验证 | 核心引擎，GLM-5 中文理解能力强，原生 SDK 零额外适配 |
+| langchain-openai | 对话状态机中 LLM 层（ChatOpenAI + Z.AI OpenAI 兼容端点）、create_react_agent + bind_tools/tool_calls | Z.AI 官方推荐 LangChain 集成方式，OpenAI 兼容接口复用 GLM_API_KEY，支持 tool calling 和 ReAct 智能体 |
 | FastAPI + uvicorn | 所有出题、知识抽取、质量评估的 HTTP API 端点 + WebSocket 聊天实时通信 | 异步支持好，原生 WebSocket 支持，自动生成 OpenAPI 文档便于联调，部署简单 |
 | Pydantic + pydantic-settings | 题目格式完整性检查、难度等级与解题负担参数校验、API 请求/响应建模、环境配置管理 | 类型安全校验，与 FastAPI 深度集成，配置热加载 |
-| SQLite (stdlib sqlite3) | 知识点层级关系存储、已生成题目缓存、评审结果收集、反馈数据持久化 | 零依赖、零运维、Phase 1 单机无并发需求 |
+| SQLite (aiosqlite) | 知识库/文档/知识点元数据存储、知识点层级关系存储、已生成题目缓存、评审结果收集、反馈数据持久化 | 零运维、Phase 1 单机无并发需求；aiosqlite 异步接口与 FastAPI 原生兼容 |
+| 本地文件系统 | 知识库文档原始文件存储（PDF/Word/TXT） | 零依赖，Phase 1 单机无需对象存储，路径关联 SQLite 记录 |
 | pdfplumber | PDF 教材文本提取、表格/列表结构保留 | 比 PyPDF2 对中文 PDF 的表格和列布局提取更稳定 |
 | python-docx | Word 教材段落/标题/表格文本提取 | 出版社教材多为 .docx 格式，直接读取段落样式辅助章节识别 |
 | Jinja2 | 题目格式化排版（题干/选项/答案模板）、多格式批量导出（Markdown/HTML/LaTeX） | 模板与逻辑分离，后续可灵活切换输出格式 |
@@ -44,6 +46,12 @@
 | Iter 4 总结: 结构化输出 | JSON mode + 明确 schema + temperature 0.3 是当前最可靠的 LLM 结构化输出方案。先生成正确答案再生成干扰项可避免干扰项污染答案 |
 | LangGraph 官方文档 | StateGraph + MessagesState + add_messages reducer 管理对话历史；MemorySaver 内存级 checkpoint，thread_id 隔离会话；astream(stream_mode="messages") 实现 token 级流式输出；create_react_agent 内置 ReAct 循环 |
 | LangGraph + FastAPI 集成 | FastAPI WebSocket + compiled_graph.astream_events() 逐 token 推送；需用 version="v2"；stream_mode="messages" 适合聊天场景；thread_id 在 config 中传递 |
+| Iter 6 总结: WebSocket 连接管理 | 断线重连用指数退避 + ping/pong keepalive；大对话状态需 pruning 防止 LangGraph checkpoint 膨胀；来源: FastAPI WebSocket 文档, LangGraph 文档 |
+| Iter 7 总结: SqliteSaver 持久化 | `langgraph.checkpoint.sqlite.SqliteSaver` 将 checkpoint 存入 SQLite 文件，API 与 MemorySaver 兼容（from_conn_string）。注意 v2 迁移：旧 SqliteSaver deprecated，新版在 langgraph-checkpoint-sqlite 包 |
+| Iter 7 总结: 手动 ReAct vs create_react_agent | 手动构建更灵活（可控制路由逻辑、添加自定义节点），create_react_agent 更简洁但定制空间有限。本项目选手动构建，后续添加调度策略节点时更方便 |
+| Iter 9 总结: SSE vs WebSocket | 纯服务端推送用 SSE（更简单、自动重连），需要客户端交互（取消/工具审批）用 WebSocket。本项目 WebSocket 选型合理——用户可能中途取消出题 |
+| Iter 9 总结: Bloom's Taxonomy 认知层级 | 仅 prompt 标注难度等级效果有限，结合 Remember→Understand→Apply→Analyze→Evaluate→Create 认知层级可提升难度控制可靠性。来源: AAAI 2025, arXiv 2025 |
+| Iter 9 总结: LLM 出题参考答案可靠性 | 学术共识"先推理再生成答案"——CoT prompting + 独立验证调用可降低答案幻觉率。本项目当前直接生成 reference_answer，后续可增加反向验证步骤。来源: EDM 2025 |
 
 ## 风险 & 备选
 
@@ -54,6 +62,9 @@
 - **风险:** pdfplumber `page.chars` 字符级解析在大文档（500+段）下内存开销约为文本模式的 2 倍，可能触发内存压力 → **备选:** 分页批处理 + 流式返回，或对大文档降级为行级解析而非字符级
 - **风险:** Vite proxy 仅开发环境生效 — 生产环境需配置 nginx 等反向代理将 /api 请求转发到 FastAPI 后端 → **备选:** 部署时使用 nginx 反向代理，或将前端静态文件挂载到 FastAPI 的 static 目录下同源提供服务
 - **风险:** LangGraph 学习曲线 — 状态图、checkpoint、条件边等概念需团队熟悉，且与现有出题管线（直接函数调用模式）的集成模式未验证 → **备选:** Phase 1 先用简单 StateGraph（单节点 chatbot + tool 调度），逐步引入复杂编排；若集成困难，降级为纯 FastAPI WebSocket + 手写状态管理
+- **风险:** 纯 LLM 自主决定是否调工具（ReAct 模式）可能不稳定——有时不调工具、有时调错顺序 → **备选:** 添加调度节点做固定流程编排（先知识抽取→再出题），保留 LLM 自由对话能力；或引入 LangGraph interrupt 做关键节点确认
+- **风险:** WS 流中 ToolMessage 拦截位置需仔细选择——太早拿不到完整结果，太晚无法与 token 流同步 → **备选:** 在 ToolNode 输出后、流式推送给前端前做拦截，维护一个结果缓冲区确保完整性
+- **风险:** 主观题 prompt 模板设计比选择题更复杂——reference_answer 需要完整推理步骤，LLM 可能生成不完整的参考答案 → **备选:** 增加 CoT 引导 + 反向验证调用，先生成推理步骤再输出答案
 
 ---
 
@@ -72,6 +83,7 @@
 | uvicorn | ASGI server | (runtime) | 0.46.x |
 | zai-sdk | GLM-5 SDK | (runtime) | 0.2.x |
 | langgraph | 对话状态机 | (via pytest + mypy) | 0.4.x |
+| langchain-openai | LLM 层 (ChatOpenAI) | (via pytest + mypy) | 0.3.x |
 
 ## All Checks
 

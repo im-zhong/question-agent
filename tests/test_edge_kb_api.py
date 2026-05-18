@@ -20,34 +20,34 @@ async def client(tmp_path, monkeypatch) -> AsyncClient:
 
 class TestKbApiHttpMethods:
     async def test_put_knowledge_bases_returns_405(self, client: AsyncClient) -> None:
-        resp = await client.put("/api/v1/knowledge-bases", json={"name": "test"})
+        resp = await client.put("/v1/knowledge-bases", json={"name": "test"})
         assert resp.status_code == 405
 
     async def test_delete_knowledge_bases_returns_405(self, client: AsyncClient) -> None:
-        resp = await client.delete("/api/v1/knowledge-bases")
+        resp = await client.delete("/v1/knowledge-bases")
         assert resp.status_code == 405
 
     async def test_patch_knowledge_bases_returns_405(self, client: AsyncClient) -> None:
-        resp = await client.patch("/api/v1/knowledge-bases", json={"name": "test"})
+        resp = await client.patch("/v1/knowledge-bases", json={"name": "test"})
         assert resp.status_code == 405
 
 
 class TestKbApiInputBoundary:
     async def test_create_missing_name_returns_422(self, client: AsyncClient) -> None:
-        resp = await client.post("/api/v1/knowledge-bases", json={})
+        resp = await client.post("/v1/knowledge-bases", json={})
         assert resp.status_code == 422
 
     async def test_create_whitespace_only_name_accepted(self, client: AsyncClient) -> None:
-        resp = await client.post("/api/v1/knowledge-bases", json={"name": "   "})
+        resp = await client.post("/v1/knowledge-bases", json={"name": "   "})
         assert resp.status_code == 201
 
     async def test_create_name_too_long_returns_422(self, client: AsyncClient) -> None:
-        resp = await client.post("/api/v1/knowledge-bases", json={"name": "x" * 201})
+        resp = await client.post("/v1/knowledge-bases", json={"name": "x" * 201})
         assert resp.status_code == 422
 
     async def test_create_unicode_emoji_name_succeeds(self, client: AsyncClient) -> None:
         resp = await client.post(
-            "/api/v1/knowledge-bases",
+            "/v1/knowledge-bases",
             json={"name": "📚 数学题库 🎓"},
         )
         assert resp.status_code == 201
@@ -55,14 +55,14 @@ class TestKbApiInputBoundary:
 
     async def test_create_null_description_succeeds(self, client: AsyncClient) -> None:
         resp = await client.post(
-            "/api/v1/knowledge-bases",
+            "/v1/knowledge-bases",
             json={"name": "Test", "description": None},
         )
         assert resp.status_code == 201
 
     async def test_create_extra_fields_ignored(self, client: AsyncClient) -> None:
         resp = await client.post(
-            "/api/v1/knowledge-bases",
+            "/v1/knowledge-bases",
             json={"name": "Test", "unknown_field": "value"},
         )
         assert resp.status_code == 201
@@ -71,11 +71,11 @@ class TestKbApiInputBoundary:
 class TestKbApiContentType:
     async def test_create_without_content_type_returns_422(self, client: AsyncClient) -> None:
         resp = await client.post(
-            "/api/v1/knowledge-bases",
+            "/v1/knowledge-bases",
             content=b'{"name": "test"}',
         )
         assert resp.status_code == 422
 
     async def test_list_accepts_any_method_params(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/v1/knowledge-bases")
+        resp = await client.get("/v1/knowledge-bases")
         assert resp.status_code == 200
