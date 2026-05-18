@@ -91,3 +91,32 @@ async def test_delete_does_not_affect_other_kbs(client: AsyncClient) -> None:
     ids = [kb["id"] for kb in kbs]
     assert keep_id in ids
     assert remove_id not in ids
+
+
+async def test_delete_kb_removes_disk_directory(tmp_path, monkeypatch) -> None:
+    """delete_kb removes the KB directory on disk."""
+    monkeypatch.setattr("question_agent.kb.database.settings.kb_db_path", tmp_path / "test_disk.db")
+    await init_db()
+    try:
+        kb = await create_kb(KnowledgeBaseCreate(name="Disk Delete"))
+        kb_dir = tmp_path / kb.id
+        kb_dir.mkdir()
+        (kb_dir / "test.txt").write_text("content")
+
+        assert kb_dir.exists()
+        result = await delete_kb(kb.id)
+        assert result is True
+        assert not kb_dir.exists()
+    finally:
+        await close_db()
+
+
+async def test_delete_kb_idempotent_for_missing(tmp_path, monkeypatch) -> None:
+    """Deleting a nonexistent KB does not raise."""
+    monkeypatch.setattr("question_agent.kb.database.settings.kb_db_path", tmp_path / "test_idem.db")
+    await init_db()
+    try:
+        result = await delete_kb("does_not_exist")
+        assert result is False
+    finally:
+        await close_db()

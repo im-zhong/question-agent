@@ -54,3 +54,4 @@ updated: 2026-05-18
 | Items | [items/2026-05-13-10-文档上传到知识库.md](items/2026-05-13-10-文档上传到知识库.md) | 完成 |
 | Summary (Iter 10) | [summaries/2026-05-12-summary-iter10.md](summaries/2026-05-12-summary-iter10.md) | ACTIVE |
 | Items | [items/2026-05-18-01-知识库列表与删除.md](items/2026-05-18-01-知识库列表与删除.md) | 完成 |
+| Items | [items/2026-05-18-11-知识库列表与删除.md](items/2026-05-18-11-知识库列表与删除.md) | 完成 |

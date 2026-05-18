@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import UTC, datetime
 from typing import TypedDict
 from uuid import uuid4
@@ -11,6 +12,8 @@ import aiosqlite
 
 from question_agent.config import settings
 from question_agent.kb.models import Document, KnowledgeBase, KnowledgeBaseCreate, KnowledgePoint
+
+logger = logging.getLogger(__name__)
 
 _conn: aiosqlite.Connection | None = None
 _lock = asyncio.Lock()
@@ -366,8 +369,6 @@ async def delete_kb(kb_id: str) -> bool:
     """
     import shutil
 
-    from question_agent.config import settings
-
     conn = await get_db_conn()
     cursor = await conn.execute("SELECT id FROM knowledge_bases WHERE id = ?", (kb_id,))
     if await cursor.fetchone() is None:
@@ -382,6 +383,9 @@ async def delete_kb(kb_id: str) -> bool:
     # Remove files on disk
     kb_dir = settings.kb_db_path.parent / kb_id
     if kb_dir.is_dir():
-        shutil.rmtree(kb_dir, ignore_errors=True)
+        try:
+            shutil.rmtree(kb_dir)
+        except OSError:
+            logger.warning("Failed to remove KB directory %s", kb_dir, exc_info=True)
 
     return True

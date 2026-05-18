@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ChatSidebar } from '@/components/chat-sidebar';
 import { ChatProvider, useChat } from '@/lib/chat-context';
 import { Button } from '@/components/ui/button';
+import { Toaster } from '@/components/ui/sonner';
 import { Database, MessageSquare, PanelLeft, PanelLeftClose } from 'lucide-react';
 
 export const Route = createRootRoute({
@@ -22,6 +23,7 @@ function RootLayoutInner() {
   const { conversations, activeId, createConversation, selectConversation } = useChat();
 
   return (
+    <>
     <div className="flex h-screen overflow-hidden bg-background">
       <ChatSidebar
         collapsed={sidebarCollapsed}
@@ -64,5 +66,7 @@ function RootLayoutInner() {
         </main>
       </div>
     </div>
+    <Toaster />
+    </>
   );
 }

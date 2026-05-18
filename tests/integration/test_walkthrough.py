@@ -199,6 +199,50 @@ async def test_kb_delete(client: httpx.AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_kb_delete_cascade(client: httpx.AsyncClient) -> None:
+    """DELETE KB cascades to documents and knowledge points."""
+    # Create KB and upload document (creates KPs)
+    resp = await client.post(
+        "/v1/knowledge-bases",
+        json={"name": "Cascade Delete KB"},
+    )
+    assert resp.status_code == 201
+    kb_id = resp.json()["id"]
+
+    text = "第一章 力学\n牛顿第二定律描述了力等于质量乘以加速度。"
+    resp = await client.post(
+        f"/v1/knowledge-bases/{kb_id}/documents",
+        files={"file": ("physics.txt", text.encode(), "text/plain")},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["knowledge_point_count"] > 0
+
+    # Verify documents and KPs exist
+    docs_resp = await client.get(f"/v1/knowledge-bases/{kb_id}/documents")
+    assert docs_resp.status_code == 200
+    assert len(docs_resp.json()) > 0
+
+    kps_resp = await client.get(f"/v1/knowledge-bases/{kb_id}/knowledge-points")
+    assert kps_resp.status_code == 200
+    assert len(kps_resp.json()) > 0
+
+    # Delete the KB
+    resp = await client.delete(f"/v1/knowledge-bases/{kb_id}")
+    assert resp.status_code == 204
+
+    # Verify cascade: KB removed from list
+    list_resp = await client.get("/v1/knowledge-bases")
+    assert all(kb["id"] != kb_id for kb in list_resp.json())
+
+    # Verify cascade: documents and KPs endpoints return 404
+    docs_resp = await client.get(f"/v1/knowledge-bases/{kb_id}/documents")
+    assert docs_resp.status_code == 404
+
+    kps_resp = await client.get(f"/v1/knowledge-bases/{kb_id}/knowledge-points")
+    assert kps_resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_kb_knowledge_points_list(client: httpx.AsyncClient) -> None:
     """GET .../knowledge-points returns KPs after upload (direct backend)."""
     # Create a KB and upload

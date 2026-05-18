@@ -4,6 +4,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Database,
   Plus,
   Loader2,
@@ -14,6 +24,7 @@ import {
   ChevronRight,
   Trash2,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 const API_URL = '/api/v1';
 
@@ -80,6 +91,10 @@ function KnowledgeBasesPage() {
   // Upload state
   const [uploadingKbId, setUploadingKbId] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Delete state
+  const [deletingKbId, setDeletingKbId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const fetchKbs = useCallback(async () => {
     try {
@@ -152,8 +167,7 @@ function KnowledgeBasesPage() {
         await fetchDetails(kbId);
       }
     } catch (err) {
-      // eslint-disable-next-line no-alert
-      alert(err instanceof Error ? err.message : '上传失败');
+      toast.error(err instanceof Error ? err.message : '上传失败');
     } finally {
       setUploadingKbId(null);
     }
@@ -164,7 +178,6 @@ function KnowledgeBasesPage() {
     if (file) {
       handleUpload(kbId, file);
     }
-    // Reset input so re-uploading the same file triggers change
     e.target.value = '';
   }, [handleUpload]);
 
@@ -200,13 +213,11 @@ function KnowledgeBasesPage() {
     }
   }, [name, description, subject, gradeLevel, fetchKbs]);
 
-  // Delete state
-  const [deletingKbId, setDeletingKbId] = useState<string | null>(null);
-
-  const handleDelete = useCallback(async (kbId: string, kbName: string) => {
-    // eslint-disable-next-line no-alert
-    if (!window.confirm(`确定要删除知识库「${kbName}」吗？该操作不可恢复。`)) return;
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteTarget) return;
+    const kbId = deleteTarget.id;
     setDeletingKbId(kbId);
+    setDeleteTarget(null);
     try {
       const res = await fetch(`${API_URL}/knowledge-bases/${kbId}`, {
         method: 'DELETE',
@@ -222,11 +233,11 @@ function KnowledgeBasesPage() {
       }
       await fetchKbs();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '删除失败');
+      toast.error(err instanceof Error ? err.message : '删除失败');
     } finally {
       setDeletingKbId(null);
     }
-  }, [expandedKbId, fetchKbs]);
+  }, [deleteTarget, expandedKbId, fetchKbs]);
 
   const statusBadge = (status: string, errorMessage: string | null) => {
     if (status === 'ready') {
@@ -325,8 +336,11 @@ function KnowledgeBasesPage() {
         ) : kbs.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <FolderOpen className="mb-3 size-10 opacity-40" />
-            <p className="text-sm">暂无知识库</p>
-            <p className="text-xs">点击上方"新建知识库"开始</p>
+            <p className="mb-3 text-sm">暂无知识库</p>
+            <Button size="sm" onClick={() => setShowCreate(true)}>
+              <Plus className="mr-1 size-4" />
+              创建知识库
+            </Button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -389,7 +403,7 @@ function KnowledgeBasesPage() {
                         variant="ghost"
                         className="h-7 px-2 text-xs text-destructive hover:text-destructive"
                         disabled={deletingKbId === kb.id}
-                        onClick={() => handleDelete(kb.id, kb.name)}
+                        onClick={() => setDeleteTarget({ id: kb.id, name: kb.name })}
                       >
                         {deletingKbId === kb.id ? (
                           <Loader2 className="size-3 animate-spin" />
@@ -409,7 +423,6 @@ function KnowledgeBasesPage() {
                         </div>
                       ) : (
                         <>
-                          {/* Documents section */}
                           <div className="mb-3">
                             <h4 className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                               <FileText className="size-3.5" />
@@ -440,7 +453,6 @@ function KnowledgeBasesPage() {
                             )}
                           </div>
 
-                          {/* Knowledge Points section */}
                           <div>
                             <button
                               type="button"
@@ -486,6 +498,28 @@ function KnowledgeBasesPage() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除知识库「{deleteTarget?.name}」吗？该操作不可恢复，所有文档和知识点将被永久删除。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={deletingKbId !== null}
+            >
+              {deletingKbId ? <Loader2 className="mr-1 size-3 animate-spin" /> : null}
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
