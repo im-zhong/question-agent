@@ -66,7 +66,6 @@ class TestChatSidebarAccessibility:
         content = (FRONTEND_DIR / "src" / "routes" / "chat.tsx").read_text()
         assert 'aria-label="发送"' in content, "Send button should have aria-label"
 
-
 class TestChatMessageRendering:
     """Verify chat message components exist and use correct patterns."""
 
